@@ -1,4 +1,3 @@
-  GNU nano 7.2                          camerabenchmark1.py                                   
 import zmq
 import pickle
 import time
