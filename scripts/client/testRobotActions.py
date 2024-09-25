@@ -8,7 +8,7 @@ import logging
 from typing import Dict, Any, Optional
 
 from gello.cameras.realsense_camera import RealSenseCamera, get_device_ids
-from gello.robots.xarm_robot import XArmRobot  # Ensure the correct import path
+from gello.robots.xarm_robot import XArmRobot
 from boundary_manager import BoundaryManager
 from box_boundary import BoxBoundary
 
@@ -80,7 +80,7 @@ def capture_positions_continuously(robot: XArmRobot, positions: list, capture_ev
     while capture_event.is_set():
         position_state = robot.get_position()
         if position_state:
-            current_position = np.array([position_state.x, position_state.y, position_state.z]) / 1000.0  # Convert mm to meters
+            current_position = np.array([position_state.x, position_state.y, position_state.z])
             positions.append(current_position)
             logger.debug(f"Captured position: {current_position}")
         else:
@@ -210,7 +210,7 @@ def run_client(server_ip: str, port: int = 8001):
     # ------------------------------
     # Initialize Robot
     # ------------------------------
-    robot_ip = "192.168.1.226"  # Replace with your robot's IP
+    robot_ip = "192.168.1.226"
     robot = XArmRobot(ip=robot_ip, real=True)
 
     # ------------------------------
