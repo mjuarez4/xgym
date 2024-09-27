@@ -7,8 +7,10 @@ import threading
 import logging
 from typing import Dict, Any, Optional
 
+json_numpy.patch()
+
 from gello.cameras.realsense_camera import RealSenseCamera, get_device_ids
-from gello.robots.xarm_robot import XArmRobot
+from xarm.wrapper import XArmAPI
 from boundary_manager import BoundaryManager
 from box_boundary import BoxBoundary
 
@@ -21,7 +23,6 @@ logger = logging.getLogger(__name__)
 # ------------------------------
 # Helper Functions
 # ------------------------------
-
 def capture_and_resize(rs_camera):
     """
     Captures an image from the RealSense camera and resizes it to 224x224 pixels.
@@ -52,10 +53,13 @@ def send_observation_and_get_action(server_ip: str, port: int, payload: Dict[str
     try:
         response = requests.post(url, json=payload, timeout=10)  # Set timeout to avoid hanging
         response.raise_for_status()
-        action = response.json()
-        action_array = np.array(action)
-        logger.info(f"Received action: {action_array}")
-        return action_array
+        response_text = response.text
+        logger.debug(f"Raw response text: {response_text}")
+        action = json_numpy.loads(response_text)
+        action = json_numpy.loads(action)
+        logger.info(f"recieved action: {action}")
+        logger.debug(f"type of action: {type(action)}")
+        return action
     except requests.exceptions.RequestException as e:
         logger.error(f"Request failed: {e}")
         return None
@@ -67,7 +71,7 @@ def send_observation_and_get_action(server_ip: str, port: int, payload: Dict[str
 # Configuration Phase Functions
 # ------------------------------
 
-def capture_positions_continuously(robot: XArmRobot, positions: list, capture_event: threading.Event):
+def capture_positions_continuously(robot: XArmAPI, positions: list, capture_event: threading.Event):
     """
     Continuously captures the robot's Cartesian positions until the capture_event is cleared.
 
@@ -77,17 +81,16 @@ def capture_positions_continuously(robot: XArmRobot, positions: list, capture_ev
         capture_event (threading.Event): Event to control capturing.
     """
     logger.info("Capturing positions... Move the robot within the desired operational space.")
+    info = capture_event.is_set()
+    logger.info(f"is event set: {info}")
     while capture_event.is_set():
         position_state = robot.get_position()
-        if position_state:
-            current_position = np.array([position_state.x, position_state.y, position_state.z])
-            positions.append(current_position)
-            logger.debug(f"Captured position: {current_position}")
-        else:
-            logger.error("Failed to retrieve robot position.")
-        time.sleep(0.1)  # capturing rate
+        current_position = np.array(position_state[1][:3])
+        positions.append(current_position)
+        logger.info(f"Captured position: {current_position}")
+        time.sleep(0.2)  # capturing rate
 
-def confirm_and_define_boxes(boundary_manager: BoundaryManager) -> None:
+def confirm_and_define_boxes(boundary_manager: BoundaryManager, positions: list) -> None:
     """
     Allows the user to define multiple bounding boxes interactively.
 
@@ -95,6 +98,25 @@ def confirm_and_define_boxes(boundary_manager: BoundaryManager) -> None:
         boundary_manager (BoundaryManager): Instance managing the bounding boxes.
     """
     logger.info("=== Define Safety Boxes ===")
+    len_c = len(positions)
+    logger.info(f"len of pos: {len_c}")
+
+    positions_array = np.array(positions)
+    min_coords = positions_array.min(axis=0)
+    max_coords = positions_array.max(axis=0)
+
+    box = BoxBoundary(
+        min_x=min_coords[0],
+        max_x=max_coords[0],
+        min_y=min_coords[1],
+        max_y=max_coords[1],
+        min_z=min_coords[2],
+        max_z=max_coords[2],
+    )
+    boundary_manager.add_box(box)
+    logger.info(f"automatically defined safety box based on captured positions: {box}")
+
+
     while True:
         define_box = input("Do you want to define a new safety box? (yes/no): ").strip().lower()
         if define_box == "yes":
@@ -131,7 +153,7 @@ def confirm_and_define_boxes(boundary_manager: BoundaryManager) -> None:
 # Live Operation Functions
 # ------------------------------
 
-def execute_action_with_safety(robot: XArmRobot, action: np.ndarray, boundary_manager: BoundaryManager) -> bool:
+def execute_action_with_safety(robot: XArmAPI, action: np.ndarray, boundary_manager: BoundaryManager) -> bool:
     """
     Executes the action and checks if the new position is within any safety boundaries.
 
@@ -146,15 +168,33 @@ def execute_action_with_safety(robot: XArmRobot, action: np.ndarray, boundary_ma
     try:
         # Execute the action using set_servo_cartesian
         mvpose = action.tolist()  # Ensure it's a list
-        code = robot.set_servo_cartesian(
-            mvpose=mvpose,
-            speed=None,       # Use default speed
-            mvacc=None,       # Use default acceleration
-            mvtime=0,         # Reserved parameter
-            is_radian=True,   # Assuming angles are in radians
-            is_tool_coord=False  # Use base coordinate system
-        )
+        logger.info(f"Content of mvpose: {mvpose}")
+        x, y, z, roll, pitch, yaw = mvpose[:6]
+        slow_speed = 10
+        slow_acceleration = 50
         
+        robot.connect()
+        robot.motion_enable(enable=True)
+        robot.set_mode(0)
+        robot.set_state(state=0)
+
+
+        code = robot.set_position(
+            x=x,
+            y=y,
+            z=z,
+            roll=roll,
+            pitch=pitch,
+            yaw=yaw,
+            radius=None,
+            speed=slow_speed,       # Use default speed
+            mvacc=slow_acceleration,       # Use default acceleration
+            relative=True,         # relativeto pos
+            is_radian=True,
+            wait = True,
+            timeout=10
+        )
+
         if code != 0:
             logger.error(f"Action execution failed with code {code}.")
             return False
@@ -165,7 +205,7 @@ def execute_action_with_safety(robot: XArmRobot, action: np.ndarray, boundary_ma
         # Get the new Cartesian position
         position_state = robot.get_position(is_radian=True)
         if position_state:
-            new_position = np.array([position_state.x, position_state.y, position_state.z]) / 1000.0  # Convert mm to meters
+            new_position = np.array(position_state[1][:3])
             logger.info(f"New position after action: {new_position}")
         else:
             logger.error("Failed to retrieve robot position after action.")
@@ -174,14 +214,15 @@ def execute_action_with_safety(robot: XArmRobot, action: np.ndarray, boundary_ma
         # Check if the new position is within any boundary box
         if not boundary_manager.is_inside(new_position):
             logger.error(f"New position {new_position} is outside all safety boxes. Initiating emergency stop.")
-            robot.stop()  # Emergency stop
+            robot.set_mode(2)
+            # robot.emergency_stop()  # Emergency stop
             return False
 
         return True
 
     except Exception as e:
         logger.error(f"Failed to execute action with safety: {e}")
-        robot.stop()  # Ensure the robot is stopped in case of unexpected errors
+        robot.disconnect()  # Ensure the robot is stopped in case of unexpected errors
         return False
 
 # ------------------------------
@@ -205,18 +246,26 @@ def run_client(server_ip: str, port: int = 8001):
         logger.error("No RealSense devices found.")
         return
     rs_camera = RealSenseCamera(flip=False, device_id=device_ids[0])
-    rs_camera.start()  # Start the camera stream
 
     # ------------------------------
     # Initialize Robot
     # ------------------------------
-    robot_ip = "192.168.1.226"
-    robot = XArmRobot(ip=robot_ip, real=True)
-
+    robot_ip = "192.168.1.231"
+    robot = XArmAPI(robot_ip)
+    robot.connect()
+    robot.motion_enable(enable=True)
+    robot.set_mode(0)
+    robot.set_state(state=0)
     # ------------------------------
     # Initialize Boundary Manager
     # ------------------------------
     boundary_manager = BoundaryManager()
+
+    positions = []
+    capture_event = threading.Event()
+    capture_event.set()
+    capture_thread = threading.Thread(target=capture_positions_continuously, args = (robot, positions, capture_event))
+    capture_thread.daemon = True
 
     try:
         # ------------------------------
@@ -226,26 +275,35 @@ def run_client(server_ip: str, port: int = 8001):
 
         # Set robot to mode 2 for free movement
         set_mode_code = robot.set_mode(2)
+        robot.set_state(0)
         if set_mode_code != 0:
-            logger.error("Failed to set robot to mode 2 for free movement. Exiting.")
+            logger.info("Failed to set robot to mode 2 for free movement. Exiting.")
             return
         else:
             logger.info("Robot set to mode 2 for free movement.")
 
         input("Press Enter to start defining safety boundaries by moving the robot manually...")
 
-        # Allow free movement without capturing positions
+        logger.info("Starting capture of position threads")
+        capture_thread.start()
+        logger.info("Position capture thread started")
+
         input("After moving the robot to desired positions, press Enter to proceed to define safety boxes...")
 
+        capture_event.clear()
+        capture_thread.join()
+        logger.info("Position capture thread stopped")
+
         # Define safety boxes manually
-        confirm_and_define_boxes(boundary_manager)
+        confirm_and_define_boxes(boundary_manager, positions)
 
         if len(boundary_manager.boxes) == 0:
             logger.error("No safety boxes were defined. Exiting.")
             return
 
         # Set robot back to servo mode
-        set_mode_code = robot.set_mode(1)
+        set_mode_code = robot.set_mode(0)
+        robot.set_state(0)
         if set_mode_code != 0:
             logger.error("Failed to set robot back to servo mode. Exiting.")
             return
@@ -258,9 +316,6 @@ def run_client(server_ip: str, port: int = 8001):
         logger.info("=== Live Operation Phase ===")
         input("Press Enter to start live operation (sending camera feed to CrossFormer API)...")
 
-        num_requests = 0
-        total_latency = 0
-        timings = []
         operation_running = True
 
         json_numpy.patch()  # Handle NumPy arrays in JSON
@@ -281,15 +336,9 @@ def run_client(server_ip: str, port: int = 8001):
             }
 
             # Send observation to server and get action
-            request_start = time.time()
             action = send_observation_and_get_action(server_ip, port, payload)
-            request_end = time.time()
 
             if action is not None:
-                latency = request_end - request_start
-                total_latency += latency
-                num_requests += 1
-                timings.append(latency)
 
                 # Execute action with safety checks
                 success = execute_action_with_safety(robot, action, boundary_manager)
@@ -309,8 +358,7 @@ def run_client(server_ip: str, port: int = 8001):
         # Cleanup Resources
         # ------------------------------
         logger.info("Cleaning up resources.")
-        rs_camera.stop()
-        robot.stop()
+        robot.disconnect()
 
 # ------------------------------
 # Entry Point
