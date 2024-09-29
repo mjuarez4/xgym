@@ -8,14 +8,7 @@ setup(
     author='Matt Hyatt',
     author_email='mhyatt000@gmail.com',
     url='https://github.com/mhyatt000/xarm-gym',
-    install_requires=[
-        "xarm @ git+https://github.com/xArm-Developer/xArm-Python-SDK.git"
-        "gello @ git+https://github.com/wuphilipp/gello_software.git",
-        "gymnasium",
-        "numpy",
-        "opencv-python",
-        "pyrealsense2",
-    ],
+    install_requires=[ ],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
