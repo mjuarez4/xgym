@@ -1,6 +1,0 @@
-README.md
-setup.py
-xarm_gym.egg-info/PKG-INFO
-xarm_gym.egg-info/SOURCES.txt
-xarm_gym.egg-info/dependency_links.txt
-xarm_gym.egg-info/top_level.txt
