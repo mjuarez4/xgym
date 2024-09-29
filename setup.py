@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='xarm-gym',
+    name='xarm_gym',
     version='0.1',
     packages=find_packages(),
     description='gym based environment for real robot',
