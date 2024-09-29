@@ -19,7 +19,7 @@ class PartialRobotState:
     aa: Optional[Union[List[float], np.ndarray]] = None
 
     def __add__(self, other: "PartialRobotState") -> "PartialRobotState":
-        """ assumes the second robot state is a delta """
+        """assumes the second robot state is a delta"""
         raise NotImplementedError("double check for correctness adding aa")
         return PartialRobotState(
             cartesian=self.cartesian + other.cartesian,
@@ -27,6 +27,7 @@ class PartialRobotState:
             joints=self.joints + other.joints,
             aa=self.aa + other.aa,
         )
+
 
 class Boundary(ABC):
     @abstractmethod
@@ -53,7 +54,8 @@ class CartesianBoundary(Boundary):
         """
 
         return np.logical_and(
-            (min.cartesian <= state.cartesian), (state.cartesian <= max.cartesian)
+            (self.min.cartesian <= state.cartesian),
+            (state.cartesian <= self.max.cartesian),
         ).all()
 
 
@@ -78,13 +80,13 @@ class JointBoundary(Boundary):
             raise ValueError("State must be a RobotState object.")
 
         return np.logical_and(
-            (min.joints <= state.joints), (state.joints <= max.joints)
+            (self.min.joints <= state.joints), (state.joints <= self.max.joints)
         ).all()
 
 
+@dataclass
 class CompositeBoundary(Boundary):
-    def __init__(self, bounds: List[Union[CartesianBoundary, JointBoundary]] = []):
-        self.bounds: List[Union[CartesianBoundary, JointBoundary]] = bounds
+    bounds: List[Boundary]
 
     def add(self, b: Union[CartesianBoundary, JointBoundary]) -> None:
         self.bounds.append(b)
@@ -107,11 +109,11 @@ class ORBoundary(CompositeBoundary):
         return any([b.contains(state) for b in self.bounds])
 
 
+@dataclass
 class NOTBoundary(Boundary):
     """logical NOT operation on a single boundary."""
 
-    def __init__(self, bound: Union[CartesianBoundary, JointBoundary]):
-        self.bound: Union[CartesianBoundary, JointBoundary] = bound
+    bound: Boundary
 
     def contains(self, state: PartialRobotState) -> bool:
         return not self.bound.contains(state)
