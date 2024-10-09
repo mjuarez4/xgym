@@ -1,3 +1,4 @@
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional, Union
@@ -6,8 +7,12 @@ import numpy as np
 
 # from gello.robots.xarm_robot import RobotState
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-@dataclass(frozen=True)
+
+# @dataclass(frozen=True)
+@dataclass()
 class PartialRobotState:
     """Represents a partial state of the robot
     inspired by gello RobotState
@@ -18,15 +23,31 @@ class PartialRobotState:
     joints: Optional[Union[List[float], np.ndarray]] = None
     aa: Optional[Union[List[float], np.ndarray]] = None
 
+    @staticmethod
+    def from_vector(vector: np.ndarray) -> "PartialRobotState":
+        """Converts a vector to a robot state object."""
+
+        return PartialRobotState(
+            cartesian=np.array(vector[:3]),
+            aa=np.array(vector[3:6]),
+            gripper=vector[6] if len(vector) == 7 else None,
+        )
+
     def __add__(self, other: "PartialRobotState") -> "PartialRobotState":
         """assumes the second robot state is a delta"""
-        raise NotImplementedError("double check for correctness adding aa")
-        return PartialRobotState(
-            cartesian=self.cartesian + other.cartesian,
-            gripper=self.gripper + other.gripper,
-            joints=self.joints + other.joints,
-            aa=self.aa + other.aa,
-        )
+        logger.warn("double check for correctness adding aa")
+
+        things = {}
+        for key in self.__annotations__:
+            v1 = getattr(self, key)
+            v2 = getattr(other, key)
+
+            if v1 is None or v2 is None:
+                things[key] = None
+            else:
+                things[key] = v1 + v2
+
+        return PartialRobotState(**things)
 
 
 class Boundary(ABC):
@@ -53,10 +74,45 @@ class CartesianBoundary(Boundary):
             bool: True if the point is inside the box, False otherwise.
         """
 
+        logger.info(
+            f"{self.min.cartesian} <= {state.cartesian} <= {self.max.cartesian}"
+        )
         return np.logical_and(
             (self.min.cartesian <= state.cartesian),
             (state.cartesian <= self.max.cartesian),
         ).all()
+
+
+@dataclass
+class AngularBoundary(Boundary):
+
+    min: PartialRobotState
+    max: PartialRobotState
+
+    def post_init(self):
+        assert len(self.min.aa) == 3
+        assert len(self.max.aa) == 3
+
+    def contains(self, state: PartialRobotState) -> bool:
+        """Checks if the given point is inside the bounding box."""
+        clean = lambda x: np.where((x > np.pi) | (x < -np.pi), x % np.pi, x)
+        logger.info(f"{self.min.aa} <= {clean(state.aa)} <= {self.max.aa}")
+        return np.logical_and(
+            (self.min.aa <= clean(state.aa)),
+            (clean(state.aa) <= self.max.aa),
+        ).all()
+
+
+@dataclass
+class GripperBoundary(Boundary):
+    min: float
+    max: float
+
+    def contains(self, state: PartialRobotState) -> bool:
+        """Checks if the given point is inside the bounding box."""
+        if state.gripper is None:
+            return True
+        return self.min <= state.gripper <= self.max
 
 
 @dataclass
@@ -95,14 +151,16 @@ class CompositeBoundary(Boundary):
         self.bounds = []
 
 
-class ANDBoundary(CompositeBoundary):
+class AND(CompositeBoundary):
     """logical AND operation between multiple boundaries."""
 
     def contains(self, state: PartialRobotState) -> bool:
-        return all([b.contains(state) for b in self.bounds])
+        c = [b.contains(state) for b in self.bounds]
+        logger.info(f"AND: {c}")
+        return all(c)
 
 
-class ORBoundary(CompositeBoundary):
+class OR(CompositeBoundary):
     """logical OR operation between multiple boundaries."""
 
     def contains(self, state: PartialRobotState) -> bool:
@@ -110,7 +168,7 @@ class ORBoundary(CompositeBoundary):
 
 
 @dataclass
-class NOTBoundary(Boundary):
+class NOT(Boundary):
     """logical NOT operation on a single boundary."""
 
     bound: Boundary

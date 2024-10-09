@@ -1,10 +1,8 @@
 import gymnasium as gym
-from base import LUCBase
-from gymnasium import env
+from xgym.gyms.base import Base
 
 
-@env.register("luc-pickup-v0.0")
-class Pickup(LUCBase):
+class Lift(Base):
     def __init__(self):
         super().__init__()
 
