@@ -4,6 +4,10 @@ from abc import ABC, abstractmethod
 from typing import List
 
 import cv2
+import gym as oaigym
+from gym import spaces
+
+_ = None
 import gymnasium as gym
 import numpy as np
 # from misc.boundary import BoundaryManager
@@ -40,6 +44,10 @@ def list_cameras():
     return arr
 
 
+def clear_camera_buffer(camera, nframes=5):
+    for _ in range(nframes):
+        camera.grab()
+
 class Base(gym.Env):
     # class Base(gym.Env, ABC):
     """Base class for all LUC environments."""
@@ -51,6 +59,43 @@ class Base(gym.Env):
         # robot: XArmAPI, boundary: bd.Boundary, cameras: List[RealSenseCamera]
     ):
         super().__init__()
+
+        # TODO make the observation space flexible to num_cameras
+
+        self.imsize = 640
+        self.action_space = spaces.Box(
+            low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32
+        )  # xyzrpyg
+        self.observation_space = spaces.Dict(
+            {
+                "robot": spaces.Dict(
+                    {
+                        "joints": spaces.Box(
+                            low=-np.pi, high=np.pi, shape=(7,), dtype=np.float32
+                        ),
+                        "position": spaces.Box(
+                            low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32
+                        ),
+                    }
+                ),
+                "img": spaces.Dict(
+                    {
+                        "camera_0": spaces.Box(
+                            low=0,
+                            high=255,
+                            shape=(self.imsize, self.imsize, 3),
+                            dtype=np.uint8,
+                        ),
+                        "wrist": spaces.Box(
+                            low=0,
+                            high=255,
+                            shape=(self.imsize, self.imsize, 3),
+                            dtype=np.uint8,
+                        ),
+                    }
+                ),
+            }
+        )
 
         print("Initializing Base class.")
         # Initialize Robot
@@ -72,19 +117,21 @@ class Base(gym.Env):
 
         # Initialize Boundaries
         logger.info("Initializing boundaries.")
-        start_angle = np.array([np.pi, 0, -np.pi / 2])
+        self.start_angle = np.array([np.pi, 0, -np.pi / 2])
         self.boundary = bd.AND(
             [
                 bd.CartesianBoundary(
-                    min=RS(cartesian=[350, -350, 5]),
+                    min=RS(cartesian=[350, -350, 1]),
                     max=RS(cartesian=[500, -75, 300]),
                 ),
                 bd.AngularBoundary(
                     min=RS(
-                        aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2]) + start_angle
+                        aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2])
+                        + self.start_angle
                     ),
                     max=RS(
-                        aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2]) + start_angle
+                        aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2])
+                        + self.start_angle
                     ),
                 ),
                 bd.GripperBoundary(min=10, max=800),
@@ -139,6 +186,19 @@ class Base(gym.Env):
         # logitech cameras
         idxs = list_cameras()
         self.cams = [cv2.VideoCapture(i) for i in idxs]
+        for cam in self.cams:
+            cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.imsize)
+            cam.set(cv2.CAP_PROP_FRAME_HEIGHT, self.imsize)
+
+            cam.set(cv2.CAP_PROP_FPS, 30)
+
+            # Disable autofocus
+            cam.set(cv2.CAP_PROP_AUTOFOCUS, 0)  # 0 to disable
+            # manual focus (0 - 255, where 0 is near, 255 is far)
+            cam.set(cv2.CAP_PROP_FOCUS, 50)
+            # Disable autoexposure
+            cam.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+            cam.set(cv2.CAP_PROP_EXPOSURE, -4)
 
     def _go_joints(self, pos: RS, relative=False, is_radian=True):
         logger.info(f"Moving to position: {pos}")
@@ -153,7 +213,7 @@ class Base(gym.Env):
             wait=True,
             # timeout=3,
         )
-        logger.warning(f"Return code: {ret}")
+        logger.info(f"Return code: {ret}")
 
     def go(self, pos: RS, relative=True, is_radian=True, tool=False):
 
@@ -187,9 +247,22 @@ class Base(gym.Env):
             timeout=10,
         )
 
+    def observation(self):
+        pos = self.position
+        imgs = self.look()
+        self._obs = {
+            "robot": {
+                "joints": self.robot.angles,
+                "position": pos.to_vector(),
+            },
+            "img": {**imgs},
+        }
+        return self._obs
+
     @abstractmethod
     def reset(self):
 
+        self.robot.set_gripper_position(500, wait=False)
         # go to the initial position
         _, self.initial = self.robot.get_initial_point()
         self.initial = RS(joints=self.initial)
@@ -197,28 +270,30 @@ class Base(gym.Env):
         # print(self.kin_fwd(self.initial.joints))
 
         self._go_joints(self.ready, relative=False)
+        return self.observation()
 
     def step(self, action):
-        if np.array(action).sum() == 0:
-            return
+        time.sleep(0.1)
         try:
             self.safety_check(action)
-            return self._step(action)
-            return "ready"
+            self._step(action)
+            return self.observation(), np.array(0.0, dtype=np.float64), False, {}
         except OutOfBoundsError as e:
             print(e)
-            return self.position, -1, True, False, {}
+            return self.observation(), np.array(-1.0, dtype=np.float64), True, {}
 
     @abstractmethod
     def _step(self, action):
+
+        assert len(action) == 7
+
         act = RS.from_vector(action)
         pos = self.position
         new = pos + act
-        joints = self.kin_inv(np.concat([new.cartesian, new.aa]))
+        joints = self.kin_inv(np.concatenate([new.cartesian, new.aa]))
         joints = RS(joints=joints)
-        print(joints)
 
-        self.robot.set_gripper_position(new.gripper, wait=False)
+        self.robot.set_gripper_position(new.gripper, wait=True)
         return self._go_joints(joints, relative=False)
         return self.go(
             act,
@@ -226,30 +301,35 @@ class Base(gym.Env):
             is_radian=False,
         )
 
-    def look(self, size=(224, 224)):
+    def look(self):
         image, depth = self.rs.read()
+        size = (self.imsize, self.imsize)
         image = cv2.resize(image, size)
+        out = {"wrist": image}
 
         for i, cam in enumerate(self.cams):
+            clear_camera_buffer(cam)
             ret, img = cam.read()
             img = cv2.cvtColor(cv2.resize(img, size), cv2.COLOR_BGR2RGB)
-            image = np.concatenate([image, img], axis=1)
+            # image = np.concatenate([image, img], axis=1)
+            out[f"camera_{i}"] = img
 
-        return image
+        return out
 
     @abstractmethod
-    def render(self, mode="human"):
+    def render(self, mode="human", refresh=False):
         """return the camera images from all cameras
         either cv2.imshow for 0.1 seconds or return the images as numpy arrays
         """
 
+        if refresh: # by default use the old camera images
+            self.observation()
+        imgs = np.concatenate(list(self._obs["img"].values()), axis=1)
         if mode == "human":
-            imgs = self.look((640, 640))
             cv2.imshow("Gym Environment", cv2.cvtColor(imgs, cv2.COLOR_RGB2BGR))
-            cv2.waitKey(1)  # 1 ms delay to allow for rendering
-
+            cv2.waitKey(10)  # 1 ms delay to allow for rendering
         elif mode == "rgb_array":
-            return self.look()
+            return imgs
 
     def safety_check(self, action):
         print(self.position)
@@ -259,18 +339,18 @@ class Base(gym.Env):
 
     @property
     def position(self):
-        pos = self.robot.position
+        pos = np.array(self.robot.position, dtype=np.float32)
         return RS(
             cartesian=pos[:3],
             aa=pos[3:],
-            joints=self.kin_inv(pos),
+            joints=np.array(self.kin_inv(pos), dtype=np.float32),
             gripper=self.gripper,
         )
 
     @property
     def gripper(self):
         code, pos = self.robot.get_gripper_position()
-        logger.info(f'GRIPPER: {code} {pos}')
+        logger.info(f"GRIPPER: {pos} code={code}")
         return pos
 
     @property
@@ -321,7 +401,6 @@ class Base(gym.Env):
         else:
             raise ValueError(f"Invalid action space: {action_space}")
 
-
     def clean(self):
         # only use if specific error @ klaud figure out what these should be
         """
@@ -344,6 +423,10 @@ class Base(gym.Env):
         # anything else?
 
     def kin_inv(self, pose):
+        """Inverse kinematics for the robot arm.
+        Returns:
+            np.array: The joint angles for the given pose.
+        """
         code, angles = self.robot.get_inverse_kinematics(pose)
         if code == 0:
             return angles
@@ -375,11 +458,17 @@ class Base(gym.Env):
                 self.robot.emergency_stop()
                 raise ValueError("Emergency stop activated")
 
+        logger.info(f"MODE:{self.robot.mode} STATE:{self.robot.state}")
+        time.sleep(0.1)
+
     def close(self):
         logger.info("Cleaning up resources.")
         time.sleep(1)
-        self.robot.reset()
-        self.robot.disconnect()
+        self._go_joints(self.ready, relative=False)
+        self.stop()
+        # self.robot.reset()
+        # self.robot.disconnect()
+
         # self.cameras.close()
         # self.boundary.close()
         # anything else?

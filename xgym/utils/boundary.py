@@ -33,6 +33,14 @@ class PartialRobotState:
             gripper=vector[6] if len(vector) == 7 else None,
         )
 
+    def to_vector(self) -> np.ndarray:
+        """Converts the robot state to a vector."""
+
+        assert all(x is not None for x in [self.cartesian, self.aa, self.gripper]), (
+            f"cartesian: {self.cartesian}, aa: {self.aa}, gripper: {self.gripper}"
+        )
+        return np.concatenate([self.cartesian, self.aa, [self.gripper]])
+
     def __add__(self, other: "PartialRobotState") -> "PartialRobotState":
         """assumes the second robot state is a delta"""
         logger.warn("double check for correctness adding aa")
@@ -55,6 +63,10 @@ class Boundary(ABC):
     def contains(self, state: PartialRobotState) -> bool:
         pass
 
+
+class Identity(Boundary):
+    def contains(self, state: PartialRobotState) -> bool:
+        return True
 
 @dataclass
 class CartesianBoundary(Boundary):

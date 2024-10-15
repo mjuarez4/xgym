@@ -4,3 +4,6 @@ gymnasium
 numpy
 opencv-python
 pyrealsense2
+envlogger[tfds]
+bsuite
+
