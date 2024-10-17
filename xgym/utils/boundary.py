@@ -5,10 +5,12 @@ from typing import List, Optional, Union
 
 import numpy as np
 
+from xgym.utils import logger
+
 # from gello.robots.xarm_robot import RobotState
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
+logger = logging.getLogger("xgym")
 
 
 # @dataclass(frozen=True)
@@ -36,9 +38,9 @@ class PartialRobotState:
     def to_vector(self) -> np.ndarray:
         """Converts the robot state to a vector."""
 
-        assert all(x is not None for x in [self.cartesian, self.aa, self.gripper]), (
-            f"cartesian: {self.cartesian}, aa: {self.aa}, gripper: {self.gripper}"
-        )
+        assert all(
+            x is not None for x in [self.cartesian, self.aa, self.gripper]
+        ), f"cartesian: {self.cartesian}, aa: {self.aa}, gripper: {self.gripper}"
         return np.concatenate([self.cartesian, self.aa, [self.gripper]])
 
     def __add__(self, other: "PartialRobotState") -> "PartialRobotState":
@@ -57,6 +59,22 @@ class PartialRobotState:
 
         return PartialRobotState(**things)
 
+    def __sub__(self, other: "PartialRobotState") -> "PartialRobotState":
+        """assumes the second robot state is a delta"""
+        logger.warn("double check for correctness subtracting aa")
+
+        things = {}
+        for key in self.__annotations__:
+            v1 = getattr(self, key)
+            v2 = getattr(other, key)
+
+            if v1 is None or v2 is None:
+                things[key] = None
+            else:
+                things[key] = v1 - v2
+
+        return PartialRobotState(**things)
+
 
 class Boundary(ABC):
     @abstractmethod
@@ -66,7 +84,9 @@ class Boundary(ABC):
 
 class Identity(Boundary):
     def contains(self, state: PartialRobotState) -> bool:
+        logger.warning("Identity boundary always returns True")
         return True
+
 
 @dataclass
 class CartesianBoundary(Boundary):
@@ -86,13 +106,26 @@ class CartesianBoundary(Boundary):
             bool: True if the point is inside the box, False otherwise.
         """
 
-        logger.info(
+        logger.debug(
             f"{self.min.cartesian} <= {state.cartesian} <= {self.max.cartesian}"
         )
+
+        logger.info(
+            f"CARTESIAN {np.logical_and( (self.min.cartesian <= state.cartesian), (state.cartesian <= self.max.cartesian),)}"
+        )
+
         return np.logical_and(
             (self.min.cartesian <= state.cartesian),
             (state.cartesian <= self.max.cartesian),
         ).all()
+
+    def clip(self, state: PartialRobotState) -> PartialRobotState:
+        """Clips the given state to the bounding box."""
+        return PartialRobotState(
+            cartesian=np.clip(state.cartesian, self.min.cartesian, self.max.cartesian),
+            aa=state.aa,
+            gripper=state.gripper,
+        )
 
 
 @dataclass
@@ -108,11 +141,19 @@ class AngularBoundary(Boundary):
     def contains(self, state: PartialRobotState) -> bool:
         """Checks if the given point is inside the bounding box."""
         clean = lambda x: np.where((x > np.pi) | (x < -np.pi), x % np.pi, x)
-        logger.info(f"{self.min.aa} <= {clean(state.aa)} <= {self.max.aa}")
+        logger.debug(f"{self.min.aa} <= {clean(state.aa)} <= {self.max.aa}")
         return np.logical_and(
             (self.min.aa <= clean(state.aa)),
             (clean(state.aa) <= self.max.aa),
         ).all()
+
+    def clip(self, state: PartialRobotState) -> PartialRobotState:
+        """Clips the given state to the bounding box."""
+        return PartialRobotState(
+            cartesian=state.cartesian,
+            aa=np.clip(state.aa, self.min.aa, self.max.aa),
+            gripper=state.gripper,
+        )
 
 
 @dataclass
@@ -125,6 +166,14 @@ class GripperBoundary(Boundary):
         if state.gripper is None:
             return True
         return self.min <= state.gripper <= self.max
+
+    def clip(self, state: PartialRobotState) -> PartialRobotState:
+        """Clips the given state to the bounding box."""
+        return PartialRobotState(
+            cartesian=state.cartesian,
+            aa=state.aa,
+            gripper=np.clip(state.gripper, self.min, self.max),
+        )
 
 
 @dataclass
@@ -162,6 +211,9 @@ class CompositeBoundary(Boundary):
     def clear(self) -> None:
         self.bounds = []
 
+    def contains(self, state: PartialRobotState) -> bool:
+        raise NotImplementedError
+
 
 class AND(CompositeBoundary):
     """logical AND operation between multiple boundaries."""
@@ -170,6 +222,11 @@ class AND(CompositeBoundary):
         c = [b.contains(state) for b in self.bounds]
         logger.info(f"AND: {c}")
         return all(c)
+
+    def clip(self, state: PartialRobotState) -> PartialRobotState:
+        for b in self.bounds:
+            state = b.clip(state)
+        return state
 
 
 class OR(CompositeBoundary):

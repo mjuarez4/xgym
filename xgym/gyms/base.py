@@ -15,13 +15,14 @@ from gello.cameras.realsense_camera import RealSenseCamera, get_device_ids
 from gello.data_utils.keyboard_interface import KBReset
 from xarm.wrapper import XArmAPI
 
+from xgym import logger
 from xgym.utils import boundary as bd
 from xgym.utils.boundary import PartialRobotState as RS
 
 # from misc.robot import XarmRobot
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+
+logger = logging.getLogger("xgym")
 
 
 # define an out of bounds error
@@ -35,11 +36,11 @@ def list_cameras():
     while index < 10:
         cap = cv2.VideoCapture(index)
         if cap.read()[0]:
-            print(f"Camera {index} is available.")
+            logger.debug(f"Camera {index} is available.")
             arr.append(index)
             cap.release()
         else:
-            print(f"No camera found at index {index}.")
+            logger.warn(f"No camera found at index {index}.")
         index += 1
     return arr
 
@@ -47,6 +48,7 @@ def list_cameras():
 def clear_camera_buffer(camera, nframes=5):
     for _ in range(nframes):
         camera.grab()
+
 
 class Base(gym.Env):
     # class Base(gym.Env, ABC):
@@ -104,12 +106,13 @@ class Base(gym.Env):
         self.robot = XArmAPI(robot_ip, is_radian=True)
         self.robot.connect()
         self.robot.motion_enable(enable=True)
+        self.robot.set_teach_sensitivity(1, wait=True)
         self.robot.set_mode(0)
         self.robot.set_state(0)
         self.robot.set_gripper_enable(True)
         self.robot.set_gripper_mode(0)
         self.robot.set_gripper_speed(1000)
-        self.robot.set_gripper_position(500, wait=False)
+        self.robot.set_gripper_position(800, wait=False)
         logger.info("Robot initialized.")
 
         # Initialize Camera
@@ -148,9 +151,9 @@ class Base(gym.Env):
 
         self.motion = {
             "cartesian": {
-                "v": 100,
-                "a": 15,
-                "mvtime": 1,
+                "v": np.pi / 4,  
+                "a": np.pi / 8, 
+                "mvtime": None,
             },
             "joint": {
                 "v": np.pi / 4,  # rad/s
@@ -190,30 +193,31 @@ class Base(gym.Env):
             cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.imsize)
             cam.set(cv2.CAP_PROP_FRAME_HEIGHT, self.imsize)
 
-            cam.set(cv2.CAP_PROP_FPS, 30)
+            cam.set(cv2.CAP_PROP_FPS, 60)
 
             # Disable autofocus
-            cam.set(cv2.CAP_PROP_AUTOFOCUS, 0)  # 0 to disable
+            # cam.set(cv2.CAP_PROP_AUTOFOCUS, 0)  # 0 to disable
             # manual focus (0 - 255, where 0 is near, 255 is far)
-            cam.set(cv2.CAP_PROP_FOCUS, 50)
+            # cam.set(cv2.CAP_PROP_FOCUS, 255)
+
             # Disable autoexposure
-            cam.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
-            cam.set(cv2.CAP_PROP_EXPOSURE, -4)
+            # cam.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+            # cam.set(cv2.CAP_PROP_EXPOSURE, -4)
 
     def _go_joints(self, pos: RS, relative=False, is_radian=True):
-        logger.info(f"Moving to position: {pos}")
+        logger.debug(f"Moving to position: {self.kin_fwd(pos.joints)}")
         ret = self.robot.set_servo_angle(
             None,
             pos.joints,
             speed=self.motion["joint"]["v"],
             mvacc=self.motion["joint"]["a"],
-            mvtime=self.motion["joint"]["mvtime"],
+            # mvtime=self.motion["joint"]["mvtime"],
             is_radian=is_radian,
             relative=relative,
             wait=True,
             # timeout=3,
         )
-        logger.info(f"Return code: {ret}")
+        logger.debug(f"Return code: {ret}")
 
     def go(self, pos: RS, relative=True, is_radian=True, tool=False):
 
@@ -262,20 +266,23 @@ class Base(gym.Env):
     @abstractmethod
     def reset(self):
 
-        self.robot.set_gripper_position(500, wait=False)
+        self.robot.set_gripper_position(800, wait=False)
         # go to the initial position
         _, self.initial = self.robot.get_initial_point()
         self.initial = RS(joints=self.initial)
-        print(f"Initial position: {self.initial}")
+        # print(f"Initial position: {self.initial}")
         # print(self.kin_fwd(self.initial.joints))
 
+        time.sleep(0.1)
         self._go_joints(self.ready, relative=False)
+        time.sleep(0.1)
         return self.observation()
 
     def step(self, action):
-        time.sleep(0.1)
+        time.sleep(0.01)
         try:
-            self.safety_check(action)
+            clipped = self.safety_check(action)
+            action = clipped.to_vector() if clipped is not None else action
             self._step(action)
             return self.observation(), np.array(0.0, dtype=np.float64), False, {}
         except OutOfBoundsError as e:
@@ -290,16 +297,13 @@ class Base(gym.Env):
         act = RS.from_vector(action)
         pos = self.position
         new = pos + act
+
         joints = self.kin_inv(np.concatenate([new.cartesian, new.aa]))
         joints = RS(joints=joints)
 
         self.robot.set_gripper_position(new.gripper, wait=True)
+        # return self.go( new, relative=False, is_radian=True)
         return self._go_joints(joints, relative=False)
-        return self.go(
-            act,
-            relative=True,
-            is_radian=False,
-        )
 
     def look(self):
         image, depth = self.rs.read()
@@ -322,7 +326,7 @@ class Base(gym.Env):
         either cv2.imshow for 0.1 seconds or return the images as numpy arrays
         """
 
-        if refresh: # by default use the old camera images
+        if refresh:  # by default use the old camera images
             self.observation()
         imgs = np.concatenate(list(self._obs["img"].values()), axis=1)
         if mode == "human":
@@ -332,17 +336,30 @@ class Base(gym.Env):
             return imgs
 
     def safety_check(self, action):
-        print(self.position)
+        logger.debug(self.position)
         act = RS.from_vector(action)
+        logger.warn(self.boundary.contains(self.position + act))
+
         if not self.boundary.contains(self.position + act):
-            raise OutOfBoundsError("Out of bounds")
+            try:
+                clipped =  self.boundary.clip(self.position + act)
+                clipped = clipped - self.position
+                logger.warn(f"clipping action: {action} to {clipped}")
+
+                logger.info(self.boundary.contains(self.position + clipped))
+
+                # input("safety: Press Enter to continue...")
+                return clipped
+            except Exception as e:
+                logger.error(e)
+                raise OutOfBoundsError("Out of bounds")
 
     @property
     def position(self):
         pos = np.array(self.robot.position, dtype=np.float32)
         return RS(
             cartesian=pos[:3],
-            aa=pos[3:],
+            aa=pos[3:6],
             joints=np.array(self.kin_inv(pos), dtype=np.float32),
             gripper=self.gripper,
         )
@@ -350,7 +367,7 @@ class Base(gym.Env):
     @property
     def gripper(self):
         code, pos = self.robot.get_gripper_position()
-        logger.info(f"GRIPPER: {pos} code={code}")
+        logger.debug(f"GRIPPER: {pos} code={code}")
         return pos
 
     @property
@@ -440,29 +457,53 @@ class Base(gym.Env):
         else:
             raise ValueError(f"Error in inverse kinematics: {code}")
 
+    def set_mode(self, mode):
+        if mode == 2:
+            self.robot.set_mode(2, detection_param=1)
+        else:
+            self.robot.set_mode(mode)
+        self.robot.set_state(0)
+        time.sleep(0.1)
+        logger.info(f"mode: {self.robot.mode}|{self.robot.state}")
+
     def stop(self, toggle=False):
+
+        print(toggle, self.robot.mode)
 
         if toggle and self.robot.mode == 2:
             self.robot.set_mode(0)
             self.robot.set_state(0)
         else:
+            while self.robot.mode == 0 or self.robot.state == 0:
+                self.set_mode(2)
+
+            """
             try:
-                print("trying to enter manual mode")
                 tick = time.time()
-                while time.time() - tick < 5 and self.robot.mode != 2:
-                    self.robot.set_mode(2)
-                    self.robot.set_state(0)
+                code = None
+                while time.time() - tick < 5 and code != 0:
+                    logger.debug("trying to enter manual mode")
+                    code = self.robot.set_mode(2)
+                    code = self.robot.set_state(0) or code
+                    logger.info(f"code: {code}")
+                    time.sleep(0.1)
+                time.sleep(0.1)
                 if self.robot.mode != 2:
-                    raise ValueError("Manual mode failed")
+                    raise ValueError(f"Manual mode failed: mode={self.robot.mode}")
             except:
+                logger.critical( ValueError("Emergency stop activated"))
                 self.robot.emergency_stop()
                 raise ValueError("Emergency stop activated")
+            """
 
+        # self.robot.clean_error()
+        # time.sleep(0.1)
+        time.sleep(0.1)
         logger.info(f"MODE:{self.robot.mode} STATE:{self.robot.state}")
         time.sleep(0.1)
 
     def close(self):
-        logger.info("Cleaning up resources.")
+        logger.debug("Cleaning up resources.")
         time.sleep(1)
         self._go_joints(self.ready, relative=False)
         self.stop()

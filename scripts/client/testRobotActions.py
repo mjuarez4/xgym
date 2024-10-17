@@ -397,4 +397,4 @@ def run_client(server_ip: str, port: int = 8001):
 # ------------------------------
 
 if __name__ == "__main__":
-    run_client(server_ip="10.22.74.18", port=8001)
+    run_client(server_ip="10.22.74.18", port=8001) # 8000 is used for docker on carina
