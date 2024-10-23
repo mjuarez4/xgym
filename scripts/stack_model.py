@@ -66,9 +66,13 @@ def main():
 
     # env: Base = gym.make("luc-base")
 
-    # env = gym.make("xgym/stack-v0")
-    _env = Stack(mode="manual")
+    model = ModelController("carina.cs.luc.edu", 8001)
+    model.reset()
 
+    # env = gym.make("xgym/stack-v0")
+    _env = Stack()
+
+    """
     with envlogger.EnvLogger(
         DMEnvFromGym(_env),
         backend=TFDSWriter(
@@ -78,70 +82,27 @@ def main():
             ds_config=dataset_config,
         ),
     ) as env:
+    """
 
+    with _env as env:
+
+        obs = env.reset()
         for _ in tqdm(range(50)):  # 3 episodes
 
-            env.reset()
+            print('\n'*3)
+            action = model(obs["img"]["camera_0"]).copy()
+            action[3:6] = 0
+            action[-1] *= 850
+            # action = action / 2
+            print(f'action')
+            print(action.tolist())
+            env.render(mode="human")
+            obs, reward, done, info = env.step(action)
 
-            ### planner algorithm
-            p1, p2 = np.array(_env.p1.joints), np.array(_env.p2.joints)
-            ready = np.array(_env.ready.joints)
-
-            # go to p1 in 3 steps
-            steps = [(p1 * a) + (ready * (1 - a)) for a in np.linspace(0, 1, 5)]
-            for s in steps:
-                print()
-                print(s)
-                absolute = _env.kin_fwd(s) + [0]
-                act = np.array(absolute) - _env.position.to_vector()
-                act[-1] = 0.00
-                print(act)
-                env.step(act.astype(np.float64))
-
-            env.step(
-                np.array([0, 0, 0, 0, 0, 0, 280 - _env.gripper]).astype(np.float64)
-            )
-            env.step(np.array([0, 0, 100, 0, 0, 0, 0]).astype(np.float64))
-
-            p2 = RS.from_vector(_env.kin_fwd(p2))
-            p2.cartesian[2] += 50
-            p2.gripper = 0
-            p2 = np.array(_env.kin_inv(p2.to_vector()[:-1]))
-            pos = _env.position.joints
-            steps = [(p2 * a) + (pos * (1 - a)) for a in np.linspace(0, 1, 5)]
-
-            for s in steps:
-                absolute = _env.kin_fwd(s) + [0]
-                act = np.array(absolute) - _env.position.to_vector()
-                act[-1] = 0
-                print(act)
-                env.step(act.astype(np.float64))
-
-            env.step(np.array([0, 0, 0, 0, 0, 0, 50]).astype(np.float64))
 
     _env.close()
 
     quit()
-
-
-def sandbox():
-    # env.go(RS(cartesian=[75, -125, 125], aa=[0, 0, 0]), relative=True)
-    # [3.133083, 0.013429, -1.608588]
-
-    # rpy=[np.pi, 0, -np.pi/2]
-    # print(env.angles)
-    # quit()
-    # env.go(RS(cartesian=env.cartesian, aa=rpy), relative=False)
-
-    # print(env.rpy)
-    # quit()
-    # rpy = np.array(env.rpy) + np.array([0.0,0,-0.1])
-    # rpy[1] = 0
-    # env.go(RS(cartesian=env.cartesian, aa=rpy), relative=False)
-
-    # action = [0.1, 0.1, 0.1, 0, 0, 0, 0]
-
-    pass
 
 
 if __name__ == "__main__":

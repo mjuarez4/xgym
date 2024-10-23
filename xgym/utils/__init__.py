@@ -1,3 +1,4 @@
-from xgym.utils.boundary import (AND, Boundary, CartesianBoundary,
-                      CompositeBoundary, JointBoundary, NOT,
-                      OR, PartialRobotState)
+from xgym.utils.logger import logger
+from xgym.utils.boundary import (AND, NOT, OR, Boundary, CartesianBoundary,
+                                 CompositeBoundary, JointBoundary,
+                                 PartialRobotState)

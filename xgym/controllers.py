@@ -1,10 +1,10 @@
 import os
-import numpy as np
 import threading
 import time
 from abc import ABC, abstractmethod
 
 import keyboard
+import numpy as np
 from pynput import keyboard
 
 
@@ -44,7 +44,15 @@ class KeyboardController:
         self.update_vector()
 
     def update_vector(self):
-        self.vec = [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Reset vec to 0 at the beginning
+        self.vec = [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ]  # Reset vec to 0 at the beginning
 
         shift_pressed = (
             keyboard.Key.shift in self.keys_pressed
@@ -124,13 +132,71 @@ class ScriptedController(Controller):
         self.action = 1
 
 
+from typing import Any, Dict, Optional
+
+import json_numpy
+import numpy as np
+import requests
+
+
 class ModelController(Controller):
-    def __init__(self):
-        self.model = None
+    def __init__(self, ip, port):
+        self.server = ip
+        self.port = port
+        self.url_query = f"http://{self.server}:{self.port}/query"
+        self.url_reset = f"http://{self.server}:{self.port}/reset"
 
-    def __call__(self, obs):
-        return self.model.predict(obs)
+    def __call__(self, image):
 
+        print(image.shape)
+        # quit()
+
+        # image = json_numpy.dumps(image)
+        payload = {
+            "observation": {"image_primary": image.tolist()},
+            "modality": "l",  # can we use both? there is another letter for both
+            "ensemble": True,
+            "model": "bafl",
+            "dataset_name": "xgym_single",  # Ensure this matches the server's dataset_name
+        }
+
+        from pprint import pprint
+
+        import jax
+
+        spec = lambda x: jax.tree.map(lambda arr: type(arr), x)
+        # pprint(spec(payload))
+        # quit()
+
+        out = self.send_observation_and_get_action(payload)
+        return out
+
+    def send_observation_and_get_action(self, payload):
+        """note from klaud
+        they json-ify the data twice
+        """
+
+        # Set timeout to avoid hanging
+        response = requests.post(self.url_query, json=payload, timeout=10)
+        response.raise_for_status()
+        response_text = response.text
+        action = json_numpy.loads(response_text) # 2x json-ified
+        action = json_numpy.loads(action)
+        return action
+
+    def reset(self):
+        payload = {
+            # "observation": {"image_primary": image.tolist()},
+            'text': 'put the yellow block on the green block',
+            "modality": "l",  # can we use both? there is another letter for both
+            "ensemble": True,
+            "model": "bafl",
+            "dataset_name": "xgym_single",  # Ensure this matches the server's dataset_name
+        }
+
+        response = requests.post(self.url_reset, json=payload, timeout=10)
+        response.raise_for_status()
+        return response.text
 
 def build_controller(mode="scripted"):
     if mode == "scripted":
