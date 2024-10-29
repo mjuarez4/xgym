@@ -1,4 +1,5 @@
 import glob
+import json
 import os
 import os.path as osp
 from typing import Any, Iterator, Tuple
@@ -141,6 +142,8 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
         root = osp.expanduser("~/tensorflow_datasets/xgym_single/source")
         root = osp.expanduser("~/data/xgym-lift-v0-*")
 
+        self.filtered = osp.expanduser("~/data/filtered.json")
+
         return {
             "train": self._generate_examples(root),
         }
@@ -173,6 +176,10 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
                     lambda x: tf.image.resize(x, (224, 224)).numpy().astype(np.uint8),
                     img,
                 )
+
+                ### in the future add camera_1, camera_2, etc.
+                img = {"camera_0": img['camera_0'], "wrist": img['wrist']}
+
                 step["observation"]["image"] = img
 
                 prop = step["observation"].pop("robot")
@@ -204,11 +211,16 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
             # if you want to skip an example for whatever reason, simply return None
             return idx, sample
 
+        with open(self.filtered, "r") as f:
+            filtered = json.load(f)
+
         for path in glob.glob(paths):
             ds = tfds.builder_from_directory(path).as_dataset(split="train")
 
             for idx, ep in enumerate(ds):
-                yield _parse_example(f'{path}_{idx}', ep)
+                if not idx in filtered.get(path, {"yes": []})["yes"]:
+                    continue
+                yield _parse_example(f"{path}_{idx}", ep)
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
         # beam = tfds.core.lazy_imports.apache_beam

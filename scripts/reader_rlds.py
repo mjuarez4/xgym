@@ -3,7 +3,7 @@ import numpy as np
 import xgym
 import tensorflow_datasets as tfds
 
-ds = tfds.load('xgym_single')['train']
+ds = tfds.load('xgym_lift_single')['train']
 
 for ep in ds:
     for s in ep['steps']:
@@ -13,4 +13,4 @@ for ep in ds:
         print(img)
 
         cv2.imshow('image', cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
-        cv2.waitKey(0)
+        cv2.waitKey(500)
