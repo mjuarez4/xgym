@@ -146,14 +146,17 @@ class ModelController(Controller):
         self.url_query = f"http://{self.server}:{self.port}/query"
         self.url_reset = f"http://{self.server}:{self.port}/reset"
 
-    def __call__(self, image):
+    def __call__(self, primary, wrist=None):
 
-        print(image.shape)
+        print(primary.shape)
         # quit()
 
-        # image = json_numpy.dumps(image)
+        # primary = json_numpy.dumps(primary)
         payload = {
-            "observation": {"image_primary": image.tolist()},
+            "observation": {
+                "image_primary": primary.tolist(),
+                **({"wrist": wrist.tolist()} if wrist is not None else {}),
+            },
             "modality": "l",  # can we use both? there is another letter for both
             "ensemble": True,
             "model": "bafl",
@@ -180,14 +183,14 @@ class ModelController(Controller):
         response = requests.post(self.url_query, json=payload, timeout=10)
         response.raise_for_status()
         response_text = response.text
-        action = json_numpy.loads(response_text) # 2x json-ified
+        action = json_numpy.loads(response_text)  # 2x json-ified
         action = json_numpy.loads(action)
         return action
 
     def reset(self):
         payload = {
             # "observation": {"image_primary": image.tolist()},
-            'text': 'put the yellow block on the green block',
+            "text": "put the yellow block on the green block",
             "modality": "l",  # can we use both? there is another letter for both
             "ensemble": True,
             "model": "bafl",
@@ -197,6 +200,7 @@ class ModelController(Controller):
         response = requests.post(self.url_reset, json=payload, timeout=10)
         response.raise_for_status()
         return response.text
+
 
 def build_controller(mode="scripted"):
     if mode == "scripted":

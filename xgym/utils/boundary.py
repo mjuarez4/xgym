@@ -13,6 +13,25 @@ from xgym.utils import logger
 logger = logging.getLogger("xgym")
 
 
+def minimize(a: np.array) -> np.array:
+    """Returns the minimum representation of the given angle.
+    when > np.pi/2 or < -np.pi/2, it returns the equivalent angle in the range [-np.pi/2, np.pi/2]
+    """
+
+    # logger.debug(f"minimizing {a}")
+    def _min(x):
+        if x > np.pi / 2:
+            return -np.pi + (x % np.pi)
+        elif x < -np.pi / 2:
+            return np.pi + (x % np.pi)
+        return x
+
+
+    a = np.array([_min(x%np.pi) for x in a])
+    # logger.debug(f"minimized {a}")
+    return a
+
+
 # @dataclass(frozen=True)
 @dataclass()
 class PartialRobotState:
@@ -72,6 +91,20 @@ class PartialRobotState:
                 things[key] = None
             else:
                 things[key] = v1 - v2
+
+        return PartialRobotState(**things)
+
+    def __mul__(self, other: float) -> "PartialRobotState":
+        logger.warn("double check for correctness multiplying aa")
+
+        things = {}
+        for key in self.__annotations__:
+            v1 = getattr(self, key)
+
+            if v1 is None:
+                things[key] = None
+            else:
+                things[key] = v1 * other
 
         return PartialRobotState(**things)
 

@@ -1,25 +1,119 @@
+import time
+from typing import Union
+
 import gymnasium as gym
+import numpy as np
+from pynput import keyboard
+
+from xgym import logger
+from xgym.controllers import KeyboardController
 from xgym.gyms.base import Base
+from xgym.utils import boundary as bd
+from xgym.utils.boundary import PartialRobotState as RS
 
 
 class Lift(Base):
-    def __init__(self):
+    def __init__(self, mode: Union[None, "manual"] = None):
         super().__init__()
 
-        self.action_space = gym.spaces.Discrete(4)
-        self.observation_space = gym.spaces.Box(
-            low=0, high=255, shape=(64, 64, 3), dtype=np.uint8
+        self.mode = mode
+        self._proceed = False
+        self.kb = KeyboardController()
+        self.kb.register(keyboard.Key.space, lambda: self.stop(toggle=True))
+        self.kb.register(keyboard.Key.enter, lambda: self.proceed())
+
+        # ready = RS(cartesian=[400, -125, 350], aa=[np.pi, 0, -np.pi / 2])
+        # ready = self.kin_inv(np.concatenate([ready.cartesian, ready.aa]))
+        # self.ready = RS(joints=ready)
+
+        self.boundary = bd.AND(
+            [
+                bd.CartesianBoundary(
+                    min=RS(cartesian=[120, -450, -25]), # -500 give kinematic error
+                    max=RS(cartesian=[500, -180, 300]),  # y was -250
+                ),
+                bd.AngularBoundary(
+                    min=RS(
+                        aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2])
+                        + self.start_angle
+                    ),
+                    max=RS(
+                        aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2])
+                        + self.start_angle
+                    ),
+                ),
+                bd.GripperBoundary(min=10 / 850, max=1),
+            ]
         )
-        self._state = np.zeros((64, 64, 3), dtype=np.uint8)
 
     def reset(self):
-        self._state = np.zeros((64, 64, 3), dtype=np.uint8)
+        ret = super().reset()
 
-        return self._state
+        if self.mode == "manual":
 
-    def _step(self, action):
-        self._state = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
-        return self._state, 0, False, False, {}
+            print("please reset the environment")
+            time.sleep(1)
+            self.set_mode(2)
 
-    def render(self, mode="human"):
-        pass
+            print("bring the end effector to the cube")
+            print("press enter to proceed")
+            time.sleep(0.1)
+            self.wait_proceed()
+            logger.warning("proceeding")
+            time.sleep(0.1)
+            self.p1 = self.position
+
+            time.sleep(0.1)
+            self.set_mode(0)
+            logger.warning("manual off")
+            time.sleep(0.1)
+            logger.warning("resetting")
+            self._step(np.array([0, 0, 100, 0, 0, 0, 1])) # go up
+            ret = super().reset()
+            logger.warning("resetted")
+            time.sleep(0.1)
+
+            # random starting position  
+            mod = np.random.choice([-1, 1], size=2)
+            rand = np.random.randint(10, 50, size=2) * mod
+            rand[1] *= np.random.choice([1, 1.5, 2], size=1) if rand[1] < 0 else 1
+            rand = rand.tolist()
+            randy = -abs(np.random.randint(10, 350, size=1) * mod)
+
+            print(rand)
+            step = np.array([rand[0], randy[0], rand[1], 0, 0, 0, 1])
+
+            self._step(step)
+
+        return self.observation()
+
+    def wait_proceed(self):
+        while not self._proceed:
+            time.sleep(0.1)
+        self._proceed = False
+
+    def proceed(self):
+        self._proceed = True
+
+    def auto_reset(self):
+        """lets you collect data with no human intervention
+        randomizes the position of the cube 
+        """
+        self.mode=None
+
+        mod = np.random.choice([-1, 1], size=2)
+        rand = np.random.randint(10, 50, size=2) * mod
+
+        # random small horizontal move
+        step = np.array([rand[0], rand[1], 0, 0, 0, 0, self.gripper/self.GRIPPER_MAX])
+        step = self.safety_check(step)
+        self._step(step)
+        # place the block on the table
+        self._step(np.array([0, 0, -100, 0, 0, 0, self.gripper/self.GRIPPER_MAX]))
+        # release the block
+        self._step(np.array([0, 0, 0, 0, 0, 0, 1]))
+        self.p1 = self.position
+        
+        # go up so you dont hit the block before reset
+        self._step(np.array([0, 0, 100, 0, 0, 0, 1]))
+

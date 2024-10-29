@@ -1,4 +1,5 @@
 import logging
+from xgym.utils import camera as cu
 import time
 from abc import ABC, abstractmethod
 from typing import List
@@ -33,7 +34,7 @@ class OutOfBoundsError(Exception):
 def list_cameras():
     index = 0
     arr = []
-    while index < 10:
+    while index < 15:
         cap = cv2.VideoCapture(index)
         if cap.read()[0]:
             logger.debug(f"Camera {index} is available.")
@@ -45,9 +46,20 @@ def list_cameras():
     return arr
 
 
-def clear_camera_buffer(camera, nframes=5):
+def clear_camera_buffer(camera, nframes=20):
     for _ in range(nframes):
         camera.grab()
+
+
+def timer(func):
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        end = time.time()
+        logger.debug(f"{func.__name__} took {end-start} seconds.")
+        return result
+
+    return wrapper
 
 
 class Base(gym.Env):
@@ -99,7 +111,7 @@ class Base(gym.Env):
             }
         )
 
-        print("Initializing Base class.")
+        print("Initializing Base.")
         # Initialize Robot
         logger.info("Initializing robot.")
         robot_ip = "192.168.1.231"
@@ -114,6 +126,9 @@ class Base(gym.Env):
         self.robot.set_gripper_speed(1000)
         self.robot.set_gripper_position(800, wait=False)
         logger.info("Robot initialized.")
+
+        self.GRIPPER_MAX = 850
+        self.GRIPPER_MIN = 10
 
         # Initialize Camera
         self._init_cameras()
@@ -137,7 +152,8 @@ class Base(gym.Env):
                         + self.start_angle
                     ),
                 ),
-                bd.GripperBoundary(min=10, max=800),
+                # bd.GripperBoundary(min=10, max=800),
+                bd.GripperBoundary(min=self.GRIPPER_MIN / self.GRIPPER_MAX, max=1),
             ]
         )
         logger.info("Boundaries initialized.")
@@ -151,16 +167,17 @@ class Base(gym.Env):
 
         self.motion = {
             "cartesian": {
-                "v": np.pi / 4,  
-                "a": np.pi / 8, 
+                "v": 50,
+                "a": np.pi,
                 "mvtime": None,
             },
             "joint": {
                 "v": np.pi / 4,  # rad/s
-                "a": np.pi / 8,  # rad/s^2
+                "a": np.pi / 4,  # rad/s^2
                 "mvtime": None,
             },
         }
+        # self.robot.set_joint_maxacc(self.motion["joint"]["a"], is_radian=True)
 
         # anything else?
         self.ready = RS(
@@ -190,8 +207,8 @@ class Base(gym.Env):
         idxs = list_cameras()
         self.cams = [cv2.VideoCapture(i) for i in idxs]
         for cam in self.cams:
-            cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.imsize)
-            cam.set(cv2.CAP_PROP_FRAME_HEIGHT, self.imsize)
+            # cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.imsize)
+            # cam.set(cv2.CAP_PROP_FRAME_HEIGHT, self.imsize)
 
             cam.set(cv2.CAP_PROP_FPS, 60)
 
@@ -220,13 +237,12 @@ class Base(gym.Env):
         logger.debug(f"Return code: {ret}")
 
     def go(self, pos: RS, relative=True, is_radian=True, tool=False):
+        """Move the robot to a given position using cartesian"""
 
         assert pos.cartesian is not None  # joint control not implemented
 
-        assert (
-            pos.cartesian is not None and pos.aa is not None
-        ) or pos.joints is not None
-        assert not (pos.cartesian is not None and pos.joints is not None)
+        assert pos.cartesian is not None and pos.aa is not None
+        # assert not (pos.cartesian is not None and pos.joints is not None)
 
         x, y, z = pos.cartesian
         roll, pitch, yaw = pos.aa
@@ -251,6 +267,7 @@ class Base(gym.Env):
             timeout=10,
         )
 
+    @timer
     def observation(self):
         pos = self.position
         imgs = self.look()
@@ -273,22 +290,21 @@ class Base(gym.Env):
         # print(f"Initial position: {self.initial}")
         # print(self.kin_fwd(self.initial.joints))
 
-        time.sleep(0.1)
         self._go_joints(self.ready, relative=False)
         time.sleep(0.1)
         return self.observation()
 
+    @timer
     def step(self, action):
-        time.sleep(0.01)
         try:
-            clipped = self.safety_check(action)
-            action = clipped.to_vector() if clipped is not None else action
+            action = self.safety_check(action)
             self._step(action)
             return self.observation(), np.array(0.0, dtype=np.float64), False, {}
         except OutOfBoundsError as e:
             print(e)
             return self.observation(), np.array(-1.0, dtype=np.float64), True, {}
 
+    @timer
     @abstractmethod
     def _step(self, action):
 
@@ -297,12 +313,18 @@ class Base(gym.Env):
         act = RS.from_vector(action)
         pos = self.position
         new = pos + act
+        new.gripper = act.gripper
+
+        logger.warn(f"gripper: {new.gripper}")
 
         joints = self.kin_inv(np.concatenate([new.cartesian, new.aa]))
         joints = RS(joints=joints)
 
-        self.robot.set_gripper_position(new.gripper, wait=True)
-        # return self.go( new, relative=False, is_radian=True)
+        if new.gripper != 1 or (new.gripper == 1 and pos.gripper != 1):
+            logger.info("GRIPPER")
+            self.robot.set_gripper_position(new.gripper * self.GRIPPER_MAX, wait=True)
+
+        # return self.go(act, relative=True, is_radian=True)
         return self._go_joints(joints, relative=False)
 
     def look(self):
@@ -314,6 +336,7 @@ class Base(gym.Env):
         for i, cam in enumerate(self.cams):
             clear_camera_buffer(cam)
             ret, img = cam.read()
+            img = cu.square(img)
             img = cv2.cvtColor(cv2.resize(img, size), cv2.COLOR_BGR2RGB)
             # image = np.concatenate([image, img], axis=1)
             out[f"camera_{i}"] = img
@@ -338,25 +361,31 @@ class Base(gym.Env):
     def safety_check(self, action):
         logger.debug(self.position)
         act = RS.from_vector(action)
-        logger.warn(self.boundary.contains(self.position + act))
+        new = self.position + act
+        new.gripper = act.gripper
+        logger.warn(self.boundary.contains(new))
 
-        if not self.boundary.contains(self.position + act):
+        if not self.boundary.contains(new):
             try:
-                clipped =  self.boundary.clip(self.position + act)
-                clipped = clipped - self.position
+                _clipped = self.boundary.clip(new)
+                clipped = _clipped - self.position
+                clipped.gripper = _clipped.gripper
                 logger.warn(f"clipping action: {action} to {clipped}")
 
                 logger.info(self.boundary.contains(self.position + clipped))
 
                 # input("safety: Press Enter to continue...")
-                return clipped
+                return clipped.to_vector()
             except Exception as e:
                 logger.error(e)
                 raise OutOfBoundsError("Out of bounds")
 
+        return action
+
     @property
     def position(self):
         pos = np.array(self.robot.position, dtype=np.float32)
+        # pos[3:6] = pos[3:6] *np.pi / 180 # deg to rad
         return RS(
             cartesian=pos[:3],
             aa=pos[3:6],

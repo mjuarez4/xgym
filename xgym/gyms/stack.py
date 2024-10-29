@@ -29,7 +29,7 @@ class Stack(Base):
         self.boundary = bd.AND(
             [
                 bd.CartesianBoundary(
-                    min=RS(cartesian=[280, -525, -15]),
+                    min=RS(cartesian=[75, -525, -15]),
                     max=RS(cartesian=[500, -250, 300]),
                 ),
                 bd.AngularBoundary(
