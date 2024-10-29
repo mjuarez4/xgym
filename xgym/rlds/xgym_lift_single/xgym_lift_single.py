@@ -148,6 +148,31 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
             "train": self._generate_examples(root),
         }
 
+    def is_noop(self, action, prev_action=None, threshold=1e-4):
+        """
+        Returns whether an action is a no-op action.
+
+        A no-op action satisfies two criteria:
+            (1) All action dimensions, except for the last one (gripper action), are near zero.
+            (2) The gripper action is equal to the previous timestep's gripper action.
+
+        Explanation of (2):
+            Naively filtering out actions with just criterion (1) is not good because you will
+            remove actions where the robot is staying still but opening/closing its gripper.
+            So you also need to consider the current state (by checking the previous timestep's
+            gripper action as a proxy) to determine whether the action really is a no-op.
+        """
+        # Special case: Previous action is None if this is the first action in the episode
+        # Then we only care about criterion (1)
+        if prev_action is None:
+            return np.linalg.norm(action[:-1]) < threshold
+
+        # Normal case: Check both criteria (1) and (2)
+        gripper_action = action[-1]
+        prev_gripper_action = prev_action[-1]
+        return np.linalg.norm(action[:-1]) < threshold and gripper_action == prev_gripper_action
+
+
     def _generate_examples(self, paths) -> Iterator[Tuple[str, Any]]:
         """Generator of examples for each split."""
 
@@ -190,6 +215,8 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
                 # pprint(spec(step["observation"]["image"]))
 
                 action = step["action"].astype(np.float32)
+                if self.is_noop(action):
+                    continue
 
                 episode.append(
                     {
