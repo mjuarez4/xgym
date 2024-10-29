@@ -1,13 +1,36 @@
 import cv2
+import imageio
+import numpy as np
 
-cam = cv2.VideoCapture(6)
-cam.set(cv2.CAP_PROP_FRAME_WIDTH, 800)
-cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 800)
+from xgym.utils import camera as cu
 
-cam.set(cv2.CAP_PROP_FPS, 60)
 
-while True:
-    ret, frame = cam.read()
-    cv2.imshow("frame", frame)
-    if cv2.waitKey(5) & 0xFF == ord("q"):
-        break
+def main():
+
+    cams = cu.list_cameras()
+
+    frames = []
+    while True:
+
+        imgs = [im for (ret, im) in [cam.read() for cam in cams.values()]]
+        imgs = [cu.square(f) for f in imgs]
+
+        # resize by the biggest dimension of frames
+        imgs = cu.resize_all(imgs)
+
+        frame = np.concatenate(imgs, axis=1)
+
+        frames.append(frame)
+        cv2.imshow("frame", frame)
+        if cv2.waitKey(50) & 0xFF == ord("q"):
+            break
+
+    cu.save_frames(frames, "test", ext="mp4", fps=30)
+
+    quit()
+
+# frames = np.array(frames)
+
+
+if __name__ == "__main__":
+    main()

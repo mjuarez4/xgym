@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from xgym.controllers import (KeyboardController, ModelController,
                               ScriptedController)
-from xgym.gyms import Base, Stack
+from xgym.gyms import Base, Lift, Stack
 from xgym.utils import boundary as bd
 from xgym.utils.boundary import PartialRobotState as RS
 
@@ -27,7 +27,8 @@ from xgym.utils.boundary import PartialRobotState as RS
 class RunCFG:
 
     base_dir: str = osp.expanduser("~/data")
-    env_name: str = "xgym-stack-v0"
+    time: str = time.strftime("%Y%m%d-%H%M%S")
+    env_name: str = f"xgym-liftmodel-v0-{time}"
     data_dir: str = osp.join(base_dir, env_name)
 
 
@@ -38,7 +39,7 @@ def main():
 
     os.makedirs(cfg.data_dir, exist_ok=True)
     dataset_config = tfds.rlds.rlds_base.DatasetConfig(
-        name="luc-base",
+        name=cfg.env_name,
         observation_info=tfds.features.FeaturesDict(
             {
                 "robot": tfds.features.FeaturesDict(
@@ -70,9 +71,8 @@ def main():
     model.reset()
 
     # env = gym.make("xgym/stack-v0")
-    _env = Stack()
+    _env = Lift()
 
-    """
     with envlogger.EnvLogger(
         DMEnvFromGym(_env),
         backend=TFDSWriter(
@@ -82,25 +82,29 @@ def main():
             ds_config=dataset_config,
         ),
     ) as env:
-    """
 
-    with _env as env:
+    # with _env as env:
 
-        for ep in range(10):
-            obs = env.reset()
-            for _ in tqdm(range(50)):  # 3 episodes
+        for ep in tqdm(range(10), desc="Episodes"):
+            # obs = env.reset()
+            timestep = env.reset()
+            obs = timestep.observation
+            for _ in tqdm(range(15), desc=f"EP{ep}"):  # 3 episodes
 
-                print('\n'*3)
+                print("\n" * 3)
+                # action = model(obs["img"]["camera_0"], obs['img']['wrist']).copy()
                 action = model(obs["img"]["camera_0"]).copy()
                 action[3:6] = 0
-                action[-1] *= 850
+                # action[-1] *= 0.8 if action[-1] < 0.8 else 1 # less gripper
                 # action = action / 2
-                print(f'action')
+                print(f"action")
                 print(action.tolist())
-                env.render(mode="human")
-                obs, reward, done, info = env.step(action)
+                _env.render(mode="human")
+                # obs, reward, done, info = env.step(action)
+                timestep = env.step(action)
+                obs = timestep.observation
 
-
+    env.close()
     _env.close()
 
     quit()
