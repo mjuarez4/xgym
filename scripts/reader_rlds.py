@@ -7,10 +7,15 @@ ds = tfds.load('xgym_lift_single')['train']
 
 for ep in ds:
     for s in ep['steps']:
-        print(s)
+        # print(s)
 
-        img = np.array(s['observation']['image']['camera_0'])
-        print(img)
+        action = np.array(s['action']).tolist()
+        action = np.array([round(a, 4) for a in action])
+        print(action)
+
+        img = np.concatenate(list(s['observation']['image'].values()), axis=1)
 
         cv2.imshow('image', cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
-        cv2.waitKey(500)
+        cv2.waitKey(50)
+
+    print()

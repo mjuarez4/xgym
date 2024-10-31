@@ -37,10 +37,13 @@ def downscale_to_224(height: int, width: int) -> Tuple[int, int]:
 
 
 class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for LUC XGym Single Arm v1.0.0"""
+    """DatasetBuilder for LUC XGym Single Arm v1.0.1"""
 
-    VERSION = tfds.core.Version("1.0.0")
-    RELEASE_NOTES = {"1.0.0": "Initial release."}
+    VERSION = tfds.core.Version("1.0.1")
+    RELEASE_NOTES = {
+        "1.0.0": "Initial release.",
+        "1.0.1": "Non blocking at 5hz... 3 world cams",
+    }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -58,21 +61,25 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
                                     "image": tfds.features.FeaturesDict(
                                         {
                                             "camera_0": tfds.features.Image(
-                                                shape=(
-                                                    224,
-                                                    224,
-                                                    3,
-                                                ),
+                                                shape=(224, 224, 3),
+                                                dtype=np.uint8,
+                                                encoding_format="png",
+                                                doc="Main camera RGB observation.",
+                                            ),
+                                            "camera_1": tfds.features.Image(
+                                                shape=(224, 224, 3),
+                                                dtype=np.uint8,
+                                                encoding_format="png",
+                                                doc="Main camera RGB observation.",
+                                            ),
+                                            "camera_2": tfds.features.Image(
+                                                shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
                                                 doc="Main camera RGB observation.",
                                             ),
                                             "wrist": tfds.features.Image(
-                                                shape=(
-                                                    224,
-                                                    224,
-                                                    3,
-                                                ),
+                                                shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
                                                 doc="Wrist camera RGB observation.",
@@ -96,9 +103,8 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
                                 }
                             ),
                             "action": tfds.features.Tensor(
-                                shape=(
-                                    7,
-                                ),  # do we need 8? for terminate episode action?
+                                # do we need 8? for terminate episode action?
+                                shape=(7,),
                                 dtype=np.float32,
                                 doc="Robot action, consists of [xyz,rpy,gripper].",
                             ),
@@ -142,10 +148,13 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
         root = osp.expanduser("~/tensorflow_datasets/xgym_single/source")
         root = osp.expanduser("~/data/xgym-lift-v0-*")
 
+        files = glob.glob(root)
+        files = [f for f in files if any([x.endswith("npz") for x in os.listdir(f)])]
+
         self.filtered = osp.expanduser("~/data/filtered.json")
 
         return {
-            "train": self._generate_examples(root),
+            "train": self._generate_examples(files),
         }
 
     def is_noop(self, action, prev_action=None, threshold=1e-4):
@@ -170,8 +179,24 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
         # Normal case: Check both criteria (1) and (2)
         gripper_action = action[-1]
         prev_gripper_action = prev_action[-1]
-        return np.linalg.norm(action[:-1]) < threshold and gripper_action == prev_gripper_action
+        return (
+            np.linalg.norm(action[:-1]) < threshold
+            and gripper_action == prev_gripper_action
+        )
 
+    def dict_unflatten(self, flat, sep="."):
+        """Unflatten a flat dictionary to a nested dictionary."""
+
+        nest = {}
+        for key, value in flat.items():
+            keys = key.split(sep)
+            d = nest
+            for k in keys[:-1]:
+                if k not in d:
+                    d[k] = {}
+                d = d[k]
+            d[keys[-1]] = value
+        return nest
 
     def _generate_examples(self, paths) -> Iterator[Tuple[str, Any]]:
         """Generator of examples for each split."""
@@ -183,45 +208,61 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
         def _parse_example(idx, ep):
 
             # assemble episode --> here we're assuming demos so we set reward to 1 at the end
+            ep = np.load(ep)
+            ep = self.dict_unflatten({x: ep[x] for x in ep.files})
+
+            ep["robot"]["joints"] = ep["robot"]["joints"].T  # patch
+            ep["proprio"] = jax.tree.map(lambda x: x.astype(np.float32), ep.pop('robot'))
+
+            ep["image"] = jax.tree_map(
+                lambda x: tf.image.resize(x, (224, 224)).numpy().astype(np.uint8),
+                ep.pop("img"),
+            )
+
             episode = []
-            for i, step in enumerate(ep["steps"]):
+            n = len(ep["proprio"]["position"])
+
+            spec = lambda arr: jax.tree.map(lambda x: x.shape, arr)
+            print(spec(ep))
+
+            for i in range(n - 1):
 
                 task = "pick up the red block"  # hardcoded for now
                 lang = self._embed([task])[0].numpy()  # embedding takes ≈0.06s
+                prev = jax.tree.map(lambda x: x[i - 1], ep) if i > 0 else None
+                step = jax.tree.map(lambda x: x[i], ep)
+                next = jax.tree.map(lambda x: x[i + 1], ep)
 
-                step = jax.tree_map(lambda x: np.array(x), step)
-                # pprint(jax.tree_map(lambda x: (x.shape, x.dtype), data))
+                act = next["proprio"]["position"] - step["proprio"]["position"]
+                act[:3] = act[:3] / int(1e3)
+                act[-1] = step["proprio"]["position"][-1] / 850
+                # print(act)
 
-                # img_shape = downscale_to_224(*image.shape[:2])
-                # image = tf.image.resize(image, img_shape).numpy().astype(np.uint8)
-
-                # needs to be reshaped because of the transforms
-                img = step["observation"].pop("img")  # .astype(np.uint8)
-                img = jax.tree_map(
-                    lambda x: tf.image.resize(x, (224, 224)).numpy().astype(np.uint8),
-                    img,
-                )
-
-                ### in the future add camera_1, camera_2, etc.
-                img = {"camera_0": img['camera_0'], "wrist": img['wrist']}
-
-                step["observation"]["image"] = img
-
-                prop = step["observation"].pop("robot")
-                prop = jax.tree_map(lambda x: x.astype(np.float32), prop)
-                step["observation"]["proprio"] = prop
-
-                spec = lambda x: jax.tree_map(lambda x: (x.shape, x.dtype), x)
-                # pprint(spec(step["observation"]["image"]))
-
-                action = step["action"].astype(np.float32)
-                if self.is_noop(action):
+                # if norm is less than eps
+                eps = 1e-4
+                if np.linalg.norm(act[:-1]) < eps and act[-1] < eps:
+                    # n -= 1
                     continue
+                elif np.linalg.norm(act[:-1]) < eps:
+                    # too much to keep all closing gripper actions
+                    if np.random.rand() < 0.5:
+                        # print(act.tolist())
+                        # n -= 1
+                        continue
+
+                # print(act.tolist())
+                # prop = step["observation"].pop("robot")
+                # prop = jax.tree_map(lambda x: x.astype(np.float32), prop)
+                # step["observation"]["proprio"] = prop
+
+                # action = step["action"].astype(np.float32)
+                # if self.is_noop(act):
+                # continue
 
                 episode.append(
                     {
-                        "observation": step["observation"],
-                        "action": step["action"].astype(np.float32),
+                        "observation": step,
+                        "action": act.astype(np.float32),
                         "discount": 1.0,
                         "reward": float(i == (len(ep) - 1)),
                         "is_first": i == 0,
@@ -238,15 +279,10 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
             # if you want to skip an example for whatever reason, simply return None
             return idx, sample
 
-        with open(self.filtered, "r") as f:
-            filtered = json.load(f)
-
-        for path in glob.glob(paths):
-            ds = tfds.builder_from_directory(path).as_dataset(split="train")
+        for path in paths:
+            ds = [osp.join(path, x) for x in os.listdir(path) if x.endswith("npz")]
 
             for idx, ep in enumerate(ds):
-                if not idx in filtered.get(path, {"yes": []})["yes"]:
-                    continue
                 yield _parse_example(f"{path}_{idx}", ep)
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
