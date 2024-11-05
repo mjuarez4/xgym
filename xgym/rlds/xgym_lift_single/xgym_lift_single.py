@@ -157,7 +157,7 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
             "train": self._generate_examples(files),
         }
 
-    def is_noop(self, action, prev_action=None, threshold=1e-4):
+    def is_noop(self, action, prev_action=None, threshold=1e-3):
         """
         Returns whether an action is a no-op action.
 
@@ -204,6 +204,8 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
         self._embed = hub.load(
             "https://tfhub.dev/google/universal-sentence-encoder-large/5"
         )
+        task = "pick up the red block"  # hardcoded for now
+        lang = self._embed([task])[0].numpy()  # embedding takes ≈0.06s
 
         def _parse_example(idx, ep):
 
@@ -211,53 +213,52 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
             ep = np.load(ep)
             ep = self.dict_unflatten({x: ep[x] for x in ep.files})
 
-            ep["robot"]["joints"] = ep["robot"]["joints"].T  # patch
-            ep["proprio"] = jax.tree.map(lambda x: x.astype(np.float32), ep.pop('robot'))
+            if ep["robot"]["joints"].shape[1] != 7:
+                ep["robot"]["joints"] = ep["robot"]["joints"].T  # patch
+
+            ep["proprio"] = jax.tree.map(
+                lambda x: x.astype(np.float32), ep.pop("robot")
+            )
 
             ep["image"] = jax.tree_map(
                 lambda x: tf.image.resize(x, (224, 224)).numpy().astype(np.uint8),
                 ep.pop("img"),
             )
 
+            # patch
+            ep["image"] = {
+                **{"wrist": ep["image"]["wrist"]},
+                **{
+                    f"camera_{i}": ep["image"][x]
+                    for i, x in enumerate(
+                        [y for y in ep["image"].keys() if "camera" in y]
+                    )
+                },
+            }
+
             episode = []
             n = len(ep["proprio"]["position"])
 
             spec = lambda arr: jax.tree.map(lambda x: x.shape, arr)
-            print(spec(ep))
+            # print(spec(ep))
 
+            prevact = None
             for i in range(n - 1):
 
-                task = "pick up the red block"  # hardcoded for now
-                lang = self._embed([task])[0].numpy()  # embedding takes ≈0.06s
                 prev = jax.tree.map(lambda x: x[i - 1], ep) if i > 0 else None
                 step = jax.tree.map(lambda x: x[i], ep)
                 next = jax.tree.map(lambda x: x[i + 1], ep)
 
                 act = next["proprio"]["position"] - step["proprio"]["position"]
                 act[:3] = act[:3] / int(1e3)
+                act[3:6] = 0
                 act[-1] = step["proprio"]["position"][-1] / 850
-                # print(act)
 
                 # if norm is less than eps
-                eps = 1e-4
-                if np.linalg.norm(act[:-1]) < eps and act[-1] < eps:
-                    # n -= 1
+                if self.is_noop(act, prevact):
                     continue
-                elif np.linalg.norm(act[:-1]) < eps:
-                    # too much to keep all closing gripper actions
-                    if np.random.rand() < 0.5:
-                        # print(act.tolist())
-                        # n -= 1
-                        continue
 
-                # print(act.tolist())
-                # prop = step["observation"].pop("robot")
-                # prop = jax.tree_map(lambda x: x.astype(np.float32), prop)
-                # step["observation"]["proprio"] = prop
-
-                # action = step["action"].astype(np.float32)
-                # if self.is_noop(act):
-                # continue
+                prevact = act
 
                 episode.append(
                     {
