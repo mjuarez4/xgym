@@ -1,4 +1,6 @@
 import os
+import jax
+import cv2
 import os.path as osp
 import time
 from dataclasses import dataclass, field
@@ -71,38 +73,63 @@ def main():
     model.reset()
 
     # env = gym.make("xgym/stack-v0")
-    _env = Lift()
+    _env = Lift(out_dir=cfg.data_dir)
 
-    with envlogger.EnvLogger(
-        DMEnvFromGym(_env),
-        backend=TFDSWriter(
-            data_directory=cfg.data_dir,
-            split_name="train",
-            max_episodes_per_file=50,
-            ds_config=dataset_config,
-        ),
-    ) as env:
+    # ds = tfds.load("xgym_lift_single", split="train")
 
-    # with _env as env:
+    freq = 5 # hz
+    dt = 1 / freq
+
+    with _env as env:
 
         for ep in tqdm(range(10), desc="Episodes"):
-            # obs = env.reset()
-            timestep = env.reset()
-            obs = timestep.observation
-            for _ in tqdm(range(15), desc=f"EP{ep}"):  # 3 episodes
+            obs = env.reset()
+            env.set_mode(7)
+            time.sleep(0.4)
+            env.start_record()
 
+            # timestep = env.reset()
+            # obs = timestep.observation
+            for _ in tqdm(range(55), desc=f"EP{ep}"):  # 3 episodes
+
+                tic = time.time()
                 print("\n" * 3)
+
+                obs['img'] = jax.tree_map(lambda x: cv2.resize(np.array(x), (224,224)), obs['img'])
+
+                print(obs['img'].keys())
+
+                myimg = obs['img']['camera_8']
+                outim = np.concatenate(list(obs['img'].values()), axis=1)
+                cv2.imshow("data Environment", cv2.cvtColor(outim, cv2.COLOR_RGB2BGR))
+                cv2.waitKey(1)  # 1 ms delay to allow for rendering
+
                 # action = model(obs["img"]["camera_0"], obs['img']['wrist']).copy()
-                action = model(obs["img"]["camera_0"]).copy()
-                action[3:6] = 0
-                # action[-1] *= 0.8 if action[-1] < 0.8 else 1 # less gripper
+                action = model(myimg, obs['img']['wrist']).copy()
+                # action = action[0] # take first of 4 steps in chunk
+
+                action[:3] *= int(1e3)
+                print(action.shape)
+                # action[3:6] = 0
+                # action[-1] = 0.2 if action[-1] < 0.8 else 1 # less gripper
                 # action = action / 2
-                print(f"action")
-                print(action.tolist())
-                _env.render(mode="human")
-                # obs, reward, done, info = env.step(action)
-                timestep = env.step(action)
-                obs = timestep.observation
+                print(f"action: {[round(x,4) for x in action.tolist()]}")
+                # _env.render(mode="human")
+
+                obs, reward, done, info = env.step(action)
+
+                toc = time.time()
+                elapsed = toc - tic
+                time.sleep(max(0, dt - elapsed))
+                # time.sleep(0.2) # 5hz control
+
+                # timestep = env.step(action)
+                # obs = timestep.observation
+
+            env.stop_record()
+            env.flush()
+            env.auto_reset()
+
 
     env.close()
     _env.close()

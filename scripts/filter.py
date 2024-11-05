@@ -27,6 +27,9 @@ def filter_episodes(dataset, path, filtered):
         if i in f.get("yes", []) or i in f.get("no", []):
             continue  # already in yes
 
+        if len(ep["steps"]) > 7:
+            _f['no'].append(i)
+
         for j, step in enumerate(ep["steps"]):
 
             imgs = step["observation"]["img"]
@@ -126,6 +129,12 @@ def main():
         f =  filtered.get(p, {}) 
         if f == "err":
             continue
+
+        yes = f.get("yes", [])
+        no = f.get("no", [])
+        # yes must not include elements in no
+        f['yes'] = list(set(yes) - set(no))
+
 
         try:
             dataset = tfds.builder_from_directory(p).as_dataset(split="all")

@@ -13,10 +13,11 @@ from xgym.utils.boundary import PartialRobotState as RS
 
 
 class Lift(Base):
-    def __init__(self, mode: Union[None, "manual"] = None):
-        super().__init__()
+    def __init__(self, manual= False, out_dir='.'):
+        super().__init__(out_dir=out_dir)
 
-        self.mode = mode
+        assert manual in [True, False]
+        self.manual = manual
         self._proceed = False
         self.kb = KeyboardController()
         self.kb.register(keyboard.Key.space, lambda: self.stop(toggle=True))
@@ -49,7 +50,7 @@ class Lift(Base):
     def reset(self):
         ret = super().reset()
 
-        if self.mode == "manual":
+        if self.manual == True:
 
             print("please reset the environment")
             time.sleep(1)
@@ -99,21 +100,22 @@ class Lift(Base):
         """lets you collect data with no human intervention
         randomizes the position of the cube 
         """
-        self.mode=None
+        self.set_mode(0)
+        self.manual=False
 
         mod = np.random.choice([-1, 1], size=2)
-        rand = np.random.randint(10, 50, size=2) * mod
+        rand = np.random.randint(1, 25, size=2) * mod
 
         # random small horizontal move
         step = np.array([rand[0], rand[1], 0, 0, 0, 0, self.gripper/self.GRIPPER_MAX])
         step = self.safety_check(step)
         self._step(step)
         # place the block on the table
-        self._step(np.array([0, 0, -100, 0, 0, 0, self.gripper/self.GRIPPER_MAX]))
+        # step vs _step so its safe
+        self.step(np.array([0, 0, -100, 0, 0, 0, self.gripper/self.GRIPPER_MAX]))
         # release the block
-        self._step(np.array([0, 0, 0, 0, 0, 0, 1]))
+        self._step(np.array([0, 0, 0, 0, 0, 0, 1]), force_grip=True)
         self.p1 = self.position
         
         # go up so you dont hit the block before reset
-        self._step(np.array([0, 0, 100, 0, 0, 0, 1]))
-
+        self._step(np.array([0, 0, 100, 0, 0, 0, 1]), force_grip=True)

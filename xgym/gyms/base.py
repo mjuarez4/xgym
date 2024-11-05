@@ -1,16 +1,21 @@
 import logging
-from xgym.utils import camera as cu
+import os
+import os.path as osp
+import threading
 import time
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Union
 
 import cv2
 import gym as oaigym
 from gym import spaces
 
+from xgym.utils import camera as cu
+
 _ = None
 import gymnasium as gym
 import numpy as np
+from gello.cameras.camera import CameraDriver
 # from misc.boundary import BoundaryManager
 from gello.cameras.realsense_camera import RealSenseCamera, get_device_ids
 from gello.data_utils.keyboard_interface import KBReset
@@ -24,31 +29,12 @@ from xgym.utils.boundary import PartialRobotState as RS
 
 
 logger = logging.getLogger("xgym")
+logger.setLevel(logging.INFO)
 
 
 # define an out of bounds error
 class OutOfBoundsError(Exception):
     pass
-
-
-def list_cameras():
-    index = 0
-    arr = []
-    while index < 15:
-        cap = cv2.VideoCapture(index)
-        if cap.read()[0]:
-            logger.debug(f"Camera {index} is available.")
-            arr.append(index)
-            cap.release()
-        else:
-            logger.warn(f"No camera found at index {index}.")
-        index += 1
-    return arr
-
-
-def clear_camera_buffer(camera, nframes=20):
-    for _ in range(nframes):
-        camera.grab()
 
 
 def timer(func):
@@ -62,6 +48,62 @@ def timer(func):
     return wrapper
 
 
+@timer
+def clear_camera_buffer(camera: cv2.VideoCapture, nframes=0):
+    for _ in range(nframes):
+        camera.grab()
+
+
+class MyCamera(CameraDriver):
+    def __repr__(self) -> str:
+        return f"MyCamera(device_id={'TODO'})"
+
+    def __init__(self, cam: Union[int, cv2.VideoCapture]):
+        self.cam = cv2.VideoCapture(cam) if isinstance(cam, int) else cam
+        self.thread = None
+
+        self.fps = 30
+        self.freq = 5  # hz
+        self.dt = 1 / self.fps
+
+        # while
+        # _, self.img = self.cam.read()
+        self.start()
+
+    def start(self):
+        logger.info("start record")
+
+        self._recording = True
+
+        def _record():
+            while round(time.time(), 4) % 1:
+                continue  # begin syncronized
+
+            while self._recording:
+                tick = time.time()
+                # ret, self.img = self.cam.read()
+                self.cam.grab()
+
+                toc = time.time()
+                elapsed = toc - tick
+                time.sleep(max(0, self.dt - elapsed))
+
+        self.thread = threading.Thread(target=_record, daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        logger.info("stop record")
+        self._recording = False
+        if self.thread is not None:
+            self.thread.join()  # Wait for the thread to finish
+            del self.thread
+
+    def read(self):
+        ret, img = self.cam.retrieve()
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        return img
+
+
 class Base(gym.Env):
     # class Base(gym.Env, ABC):
     """Base class for all LUC environments."""
@@ -70,9 +112,11 @@ class Base(gym.Env):
     def __init__(
         self,
         render_mode="human",
+        out_dir=".",
         # robot: XArmAPI, boundary: bd.Boundary, cameras: List[RealSenseCamera]
     ):
         super().__init__()
+        self.logger = logger
 
         # TODO make the observation space flexible to num_cameras
 
@@ -120,6 +164,7 @@ class Base(gym.Env):
         self.robot.motion_enable(enable=True)
         self.robot.set_teach_sensitivity(1, wait=True)
         self.robot.set_mode(0)
+        self.mode = 0
         self.robot.set_state(0)
         self.robot.set_gripper_enable(True)
         self.robot.set_gripper_mode(0)
@@ -193,6 +238,11 @@ class Base(gym.Env):
             # rpy=[np.pi, 0, -np.pi/2]
         )
 
+        self.thread = None
+        self.episode = []
+        self.nepisodes = 0
+        self.out_dir = osp.expanduser(out_dir)
+
     def _init_cameras(self):
         logger.info("Initializing cameras.")
 
@@ -204,23 +254,25 @@ class Base(gym.Env):
         logger.info("Cameras initialized.")
 
         # logitech cameras
-        idxs = list_cameras()
-        self.cams = [cv2.VideoCapture(i) for i in idxs]
-        for cam in self.cams:
-            # cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.imsize)
-            # cam.set(cv2.CAP_PROP_FRAME_HEIGHT, self.imsize)
+        cams = cu.list_cameras()
+        self.cams = {k: MyCamera(cam) for k, cam in cams.items()}
+        print(self.cams)
 
-            cam.set(cv2.CAP_PROP_FPS, 60)
+        # cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.imsize)
+        # cam.set(cv2.CAP_PROP_FRAME_HEIGHT, self.imsize)
 
-            # Disable autofocus
-            # cam.set(cv2.CAP_PROP_AUTOFOCUS, 0)  # 0 to disable
-            # manual focus (0 - 255, where 0 is near, 255 is far)
-            # cam.set(cv2.CAP_PROP_FOCUS, 255)
+        # cam.set(cv2.CAP_PROP_FPS, 60)
 
-            # Disable autoexposure
-            # cam.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
-            # cam.set(cv2.CAP_PROP_EXPOSURE, -4)
+        # Disable autofocus
+        # cam.set(cv2.CAP_PROP_AUTOFOCUS, 0)  # 0 to disable
+        # manual focus (0 - 255, where 0 is near, 255 is far)
+        # cam.set(cv2.CAP_PROP_FOCUS, 255)
 
+        # Disable autoexposure
+        # cam.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+        # cam.set(cv2.CAP_PROP_EXPOSURE, -4)
+
+    @timer
     def _go_joints(self, pos: RS, relative=False, is_radian=True):
         logger.debug(f"Moving to position: {self.kin_fwd(pos.joints)}")
         ret = self.robot.set_servo_angle(
@@ -269,11 +321,18 @@ class Base(gym.Env):
 
     @timer
     def observation(self):
-        pos = self.position
+
         imgs = self.look()
+        pos = self.position
+
+        if pos.gripper is None:
+            pos.gripper = self.gripper
+        if pos.gripper is None:
+            pos.gripper = self._obs["robot"]["position"][-1]
+
         self._obs = {
             "robot": {
-                "joints": self.robot.angles,
+                "joints": pos.joints,
                 "position": pos.to_vector(),
             },
             "img": {**imgs},
@@ -283,6 +342,7 @@ class Base(gym.Env):
     @abstractmethod
     def reset(self):
 
+        self.set_mode(0)
         self.robot.set_gripper_position(800, wait=False)
         # go to the initial position
         _, self.initial = self.robot.get_initial_point()
@@ -291,57 +351,132 @@ class Base(gym.Env):
         # print(self.kin_fwd(self.initial.joints))
 
         self._go_joints(self.ready, relative=False)
+        self.robot.set_position(
+            x=400,
+            y=-180,
+            z=250,
+            roll=np.pi,
+            pitch=0,
+            yaw=-np.pi / 2,
+            relative=False,
+            wait=True,
+        )
+        self.ready = self.position
+
         time.sleep(0.1)
+
+        # self.stop_record()
         return self.observation()
+
+    def flush(self):
+        # write the episode to disk
+        # episode is list of dicts
+        logger.info("Flushing episode to disk.")
+        if len(self.episode):
+            import jax
+
+            episode = jax.tree.map(
+                lambda x, *y: np.stack([x, *y]), self.episode[0], *self.episode[1:]
+            )
+
+            def du_flatten(d, parent_key="", sep="."):
+                items = []
+                for k, v in d.items():
+                    new_key = parent_key + sep + k if parent_key else k
+                    if isinstance(v, dict):
+                        items.extend(du_flatten(v, new_key, sep=sep).items())
+                    else:
+                        items.append((new_key, v))
+                return dict(items)
+
+            episode = du_flatten(episode)
+            out_path = osp.join(self.out_dir, f"episode{self.nepisodes}.npz")
+            np.savez(out_path, **episode)
+            self.episode = []
+            self.nepisodes += 1
+
+    def start_record(self):
+        logger.info("start record")
+
+        freq = 5  # hz
+        dt = 1 / freq
+        self._recording = True
+
+        def _record():
+            while self._recording:
+                tick = time.time()
+                obs = self.observation()
+                self.episode.append(obs)
+                toc = time.time()
+                elapsed = toc - tick
+                logger.debug(f"obs: {obs['robot']['position'].astype(np.float16)}")
+                time.sleep(max(0, dt - elapsed))
+
+        self.thread = threading.Thread(target=_record, daemon=True)
+        self.thread.start()
+
+    def stop_record(self):
+        logger.info("stop record")
+        self._recording = False
+        if self.thread is not None:
+            self.thread.join()  # Wait for the thread to finish
 
     @timer
     def step(self, action):
         try:
             action = self.safety_check(action)
-            self._step(action)
+            self._step(action, wait=self.mode == 0)
+            obs = self.episode[-1] if len(self.episode) else self.observation()
             return self.observation(), np.array(0.0, dtype=np.float64), False, {}
         except OutOfBoundsError as e:
             print(e)
-            return self.observation(), np.array(-1.0, dtype=np.float64), True, {}
+            obs = self.episode[-1] if len(self.episode) else self.observation()
+            return obs, np.array(-1.0, dtype=np.float64), True, {}
 
     @timer
     @abstractmethod
-    def _step(self, action):
+    def _step(self, action, force_grip=False, wait=True):
 
         assert len(action) == 7
-
         act = RS.from_vector(action)
-        pos = self.position
-        new = pos + act
-        new.gripper = act.gripper
 
-        logger.warn(f"gripper: {new.gripper}")
+        if (
+            act.gripper < 0.9 or (self.gripper / self.GRIPPER_MAX) < 0.9 or force_grip
+        ):  # save time?
+            self.robot.set_gripper_position(act.gripper * self.GRIPPER_MAX, wait=wait)
+        else:
+            logger.info("skipping gripper for speed")
 
-        joints = self.kin_inv(np.concatenate([new.cartesian, new.aa]))
-        joints = RS(joints=joints)
+        print(f"waiting: {wait}")
+        if wait:
+            self.robot.set_position(
+                x=act.cartesian[0],
+                y=act.cartesian[1],
+                z=act.cartesian[2],
+                relative=True,
+                # speed=60,
+                wait=wait,
+            )
+        else:
+            self.robot.set_position(
+                x=act.cartesian[0] + self.cartesian[0],
+                y=act.cartesian[1] + self.cartesian[1],
+                z=act.cartesian[2] + self.cartesian[2],
+                relative=False,
+                wait=wait,
+            )
 
-        if new.gripper != 1 or (new.gripper == 1 and pos.gripper != 1):
-            logger.info("GRIPPER")
-            self.robot.set_gripper_position(new.gripper * self.GRIPPER_MAX, wait=True)
-
-        # return self.go(act, relative=True, is_radian=True)
-        return self._go_joints(joints, relative=False)
-
+    @timer
     def look(self):
         image, depth = self.rs.read()
+        imgs = {f"camera_{k}": cam.read() for k, cam in self.cams.items()}
+        imgs["wrist"] = image
+
         size = (self.imsize, self.imsize)
-        image = cv2.resize(image, size)
-        out = {"wrist": image}
+        imgs = {k: cv2.resize(cu.square(v), size) for k, v in imgs.items()}
 
-        for i, cam in enumerate(self.cams):
-            clear_camera_buffer(cam)
-            ret, img = cam.read()
-            img = cu.square(img)
-            img = cv2.cvtColor(cv2.resize(img, size), cv2.COLOR_BGR2RGB)
-            # image = np.concatenate([image, img], axis=1)
-            out[f"camera_{i}"] = img
-
-        return out
+        # image = np.concatenate([image, img], axis=1)
+        return imgs
 
     @abstractmethod
     def render(self, mode="human", refresh=False):
@@ -389,7 +524,8 @@ class Base(gym.Env):
         return RS(
             cartesian=pos[:3],
             aa=pos[3:6],
-            joints=np.array(self.kin_inv(pos), dtype=np.float32),
+            joints=self.robot.angles,
+            # np.array(self.kin_inv(pos), dtype=np.float32),
             gripper=self.gripper,
         )
 
@@ -397,6 +533,7 @@ class Base(gym.Env):
     def gripper(self):
         code, pos = self.robot.get_gripper_position()
         logger.debug(f"GRIPPER: {pos} code={code}")
+        pos = self.gripper if pos is None else pos
         return pos
 
     @property
@@ -468,6 +605,7 @@ class Base(gym.Env):
         # self.boundary.clean()
         # anything else?
 
+    @timer
     def kin_inv(self, pose):
         """Inverse kinematics for the robot arm.
         Returns:
@@ -491,7 +629,9 @@ class Base(gym.Env):
             self.robot.set_mode(2, detection_param=1)
         else:
             self.robot.set_mode(mode)
+
         self.robot.set_state(0)
+        self.mode = mode
         time.sleep(0.1)
         logger.info(f"mode: {self.robot.mode}|{self.robot.state}")
 
