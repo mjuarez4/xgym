@@ -1,13 +1,13 @@
 import os
-import jax
-import cv2
 import os.path as osp
 import time
 from dataclasses import dataclass, field
 
+import cv2
 import draccus
 import envlogger
 import gymnasium as gym
+import jax
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
@@ -22,6 +22,7 @@ from xgym.controllers import (KeyboardController, ModelController,
                               ScriptedController)
 from xgym.gyms import Base, Lift, Stack
 from xgym.utils import boundary as bd
+from xgym.utils import camera as cu
 from xgym.utils.boundary import PartialRobotState as RS
 
 
@@ -69,15 +70,15 @@ def main():
 
     # env: Base = gym.make("luc-base")
 
-    model = ModelController("carina.cs.luc.edu", 8001)
+    model = ModelController("carina.cs.luc.edu", 8001, ensemble=True)
     model.reset()
 
     # env = gym.make("xgym/stack-v0")
-    _env = Lift(out_dir=cfg.data_dir)
+    _env = Lift(out_dir=cfg.data_dir, random=False)
 
     # ds = tfds.load("xgym_lift_single", split="train")
 
-    freq = 5 # hz
+    freq = 5  # hz
     dt = 1 / freq
 
     with _env as env:
@@ -95,33 +96,56 @@ def main():
                 tic = time.time()
                 print("\n" * 3)
 
-                obs['img'] = jax.tree_map(lambda x: cv2.resize(np.array(x), (224,224)), obs['img'])
+                obs["img"] = jax.tree_map(
+                    lambda x: cv2.resize(np.array(x), (224, 224)), obs["img"]
+                )
 
-                print(obs['img'].keys())
+                print(obs["img"].keys())
 
-                myimg = obs['img']['camera_8']
-                outim = np.concatenate(list(obs['img'].values()), axis=1)
-                cv2.imshow("data Environment", cv2.cvtColor(outim, cv2.COLOR_RGB2BGR))
+                myimg = obs["img"]["camera_10"]
+                primary = obs["img"]["camera_6"]
+
+                cv2.imshow(
+                    "data Environment",
+                    cv2.cvtColor(cu.tile(cu.writekeys(obs["img"])), cv2.COLOR_RGB2BGR),
+                )
                 cv2.waitKey(1)  # 1 ms delay to allow for rendering
 
                 # action = model(obs["img"]["camera_0"], obs['img']['wrist']).copy()
-                action = model(myimg, obs['img']['wrist']).copy()
+                actions = model(
+                    primary=primary, high=myimg, wrist=obs["img"]["wrist"]
+                ).copy()
                 # action = action[0] # take first of 4 steps in chunk
 
-                action[:3] *= int(1e3)
-                print(action.shape)
-                # action[3:6] = 0
-                # action[-1] = 0.2 if action[-1] < 0.8 else 1 # less gripper
-                # action = action / 2
-                print(f"action: {[round(x,4) for x in action.tolist()]}")
-                # _env.render(mode="human")
+                if not model.ensemble:
+                    for a, action in enumerate(actions):
+                        tic = time.time() if a else tic
+                        action[:3] *= int(1e3)
+                        print(action.shape)
+                        # action[3:6] = 0
+                        action[-1] = 0.2 if action[-1] < 0.8 else 1  # less gripper
+                        # action = action / 2
+                        print(f"action: {[round(x,4) for x in action.tolist()]}")
+                        # _env.render(mode="human")
 
-                obs, reward, done, info = env.step(action)
+                        obs, reward, done, info = env.step(action)
+                        toc = time.time()
+                        elapsed = toc - tic
+                        time.sleep(max(0, dt - elapsed))  # 5hz
 
-                toc = time.time()
-                elapsed = toc - tic
-                time.sleep(max(0, dt - elapsed))
-                # time.sleep(0.2) # 5hz control
+                else:
+                    action = actions
+                    action[:3] *= int(1e3)
+                    action[-1] = 0.2 if action[-1] < 0.8 else 1  # less gripper
+                    print(f"action: {[round(x,2) for x in action.tolist()]}")
+                    obs, reward, done, info = env.step(action)
+                    toc = time.time()
+                    elapsed = toc - tic
+                    time.sleep(max(0, dt - elapsed))  # 5hz
+
+                print(f"done: {done}")
+                if done:
+                    break
 
                 # timestep = env.step(action)
                 # obs = timestep.observation
@@ -129,7 +153,6 @@ def main():
             env.stop_record()
             env.flush()
             env.auto_reset()
-
 
     env.close()
     _env.close()

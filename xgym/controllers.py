@@ -3,9 +3,10 @@ import threading
 import time
 from abc import ABC, abstractmethod
 
-import keyboard
+# import keyboard
 import numpy as np
-from pynput import keyboard
+import pynput
+from pynput.keyboard import Key
 
 
 class Controller(ABC):
@@ -20,7 +21,7 @@ class KeyboardController:
         self.vec = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         self.running = True
         self.keys_pressed = set()
-        self.listener = keyboard.Listener(
+        self.listener = pynput.keyboard.Listener(
             on_press=self.on_key_press, on_release=self.on_key_release
         )
 
@@ -33,13 +34,19 @@ class KeyboardController:
         self.run()  # Begin the run method at the end of initialization
 
     def on_key_press(self, key):
+
+        if isinstance(key, pynput.keyboard._xorg.KeyCode):
+            key = key.char
+
         if key in self.funcs:
             self.funcs[key]()
-
         self.keys_pressed.add(key)
         self.update_vector()
 
     def on_key_release(self, key):
+
+        if isinstance(key, pynput.keyboard._xorg.KeyCode):
+            key = key.char
         self.keys_pressed.discard(key)
         self.update_vector()
 
@@ -55,26 +62,25 @@ class KeyboardController:
         ]  # Reset vec to 0 at the beginning
 
         shift_pressed = (
-            keyboard.Key.shift in self.keys_pressed
-            or keyboard.Key.shift_r in self.keys_pressed
+            Key.shift in self.keys_pressed or Key.shift_r in self.keys_pressed
         )
 
-        if keyboard.Key.up in self.keys_pressed:
+        if Key.up in self.keys_pressed:
             if shift_pressed:
                 self.vec[4] += self.rsize  # Increase ry value
             else:
                 self.vec[1] += self.size  # Increase y value
-        if keyboard.Key.down in self.keys_pressed:
+        if Key.down in self.keys_pressed:
             if shift_pressed:
                 self.vec[4] -= self.rsize  # Decrease ry value
             else:
                 self.vec[1] -= self.size  # Decrease y value
-        if keyboard.Key.left in self.keys_pressed:
+        if Key.left in self.keys_pressed:
             if shift_pressed:
                 self.vec[3] -= self.rsize  # Decrease rx value
             else:
                 self.vec[0] -= self.size  # Decrease x value
-        if keyboard.Key.right in self.keys_pressed:
+        if Key.right in self.keys_pressed:
             if shift_pressed:
                 self.vec[3] += self.rsize  # Increase rx value
             else:
@@ -121,6 +127,11 @@ class KeyboardController:
         self.funcs[key] = func
 
 
+# kb = KeyboardController()
+# while True:
+# time.sleep(0.1)
+
+
 class ScriptedController(Controller):
     def __init__(self):
         self.action = None
@@ -132,40 +143,36 @@ class ScriptedController(Controller):
         self.action = 1
 
 
+from pprint import pprint
 from typing import Any, Dict, Optional
 
+import jax
 import json_numpy
 import numpy as np
 import requests
 
 
 class ModelController(Controller):
-    def __init__(self, ip, port):
+    def __init__(self, ip, port, ensemble=True):
         self.server = ip
         self.port = port
         self.url_query = f"http://{self.server}:{self.port}/query"
         self.url_reset = f"http://{self.server}:{self.port}/reset"
+        self.ensemble = ensemble
 
-    def __call__(self, primary, wrist=None):
+    def __call__(self, primary, high=None, wrist=None):
 
-        print(primary.shape)
-        # quit()
-
-        # primary = json_numpy.dumps(primary)
         payload = {
             "observation": {
                 "image_primary": primary.tolist(),
                 **({"wrist": wrist.tolist()} if wrist is not None else {}),
+                **({"high": high.tolist()} if high is not None else {}),
             },
             "modality": "l",  # can we use both? there is another letter for both
-            "ensemble": True,
+            "ensemble": self.ensemble,
             "model": "bafl",
             "dataset_name": "xgym_single",  # Ensure this matches the server's dataset_name
         }
-
-        from pprint import pprint
-
-        import jax
 
         spec = lambda x: jax.tree.map(lambda arr: type(arr), x)
         # pprint(spec(payload))
@@ -192,7 +199,7 @@ class ModelController(Controller):
             # "observation": {"image_primary": image.tolist()},
             "text": "put the yellow block on the green block",
             "modality": "l",  # can we use both? there is another letter for both
-            "ensemble": True,
+            "ensemble": self.ensemble,
             "model": "bafl",
             "dataset_name": "xgym_single",  # Ensure this matches the server's dataset_name
         }

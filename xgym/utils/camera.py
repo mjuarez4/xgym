@@ -1,5 +1,5 @@
-from typing import List
 import os
+from typing import List
 
 import cv2
 import imageio
@@ -37,3 +37,22 @@ def save_frames(frames, path, ext="mp4", fps=30):
     with imageio.get_writer(path, fps=fps) as writer:
         for frame in frames:
             writer.append_data(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+
+def tile(imgs:dict):
+    return np.concatenate(list(imgs.values()), axis=1)
+
+
+def writekeys(imgs):
+    return {
+        x: cv2.putText(
+            imgs[x],
+            f"{x}",
+            (0, 25),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 0),
+            2,
+        )
+        for x in imgs
+    }

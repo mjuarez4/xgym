@@ -243,6 +243,8 @@ class Base(gym.Env):
         self.nepisodes = 0
         self.out_dir = osp.expanduser(out_dir)
 
+        self._done = False
+
     def _init_cameras(self):
         logger.info("Initializing cameras.")
 
@@ -342,6 +344,7 @@ class Base(gym.Env):
     @abstractmethod
     def reset(self):
 
+        self._done = False
         self.set_mode(0)
         self.robot.set_gripper_position(800, wait=False)
         # go to the initial position
@@ -427,11 +430,11 @@ class Base(gym.Env):
             action = self.safety_check(action)
             self._step(action, wait=self.mode == 0)
             obs = self.episode[-1] if len(self.episode) else self.observation()
-            return self.observation(), np.array(0.0, dtype=np.float64), False, {}
+            return self.observation(), np.array(0.0, dtype=np.float64), self._done, {}
         except OutOfBoundsError as e:
             print(e)
             obs = self.episode[-1] if len(self.episode) else self.observation()
-            return obs, np.array(-1.0, dtype=np.float64), True, {}
+            return obs, np.array(-1.0, dtype=np.float64), self._done, {}
 
     @timer
     @abstractmethod
