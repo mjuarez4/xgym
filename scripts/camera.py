@@ -23,7 +23,6 @@ def main():
 
         tic = time.time()
 
-
         _ = [cam.grab() for cam in cams.values()]
         imgs = [im for (ret, im) in [cam.retrieve() for cam in cams.values()]]
         imgs = [cu.square(f) for f in imgs]
