@@ -2,11 +2,141 @@ import os
 import threading
 import time
 from abc import ABC, abstractmethod
+from collections import namedtuple
+from dataclasses import dataclass
+from pprint import pprint
+from typing import Any, Dict, Optional
 
+import jax
+import json_numpy
 # import keyboard
 import numpy as np
 import pynput
+# spacemouse imports
+import pyspacemouse
+import requests
 from pynput.keyboard import Key
+from pyspacemouse.pyspacemouse import SpaceNavigator
+
+
+@dataclass
+class SpaceMouseConfig:
+
+    # sensitivity
+    scale = np.array([
+        10.0,
+        10.0,
+        10.0,
+        0.1,
+        0.1,
+        0.1,
+        100,
+    ])
+    flip = [1,1,1,-1,-1,-1,1]
+    order = [0, 1, 2, 5, 3, 4, 6]
+
+
+def ema_2d(data, window):
+    """ Calculate EMA for 2D array """
+
+    alpha = 2 / (window + 1)  # Smoothing factor
+    ema = np.empty_like(data)
+    ema[0, :] = data[0, :]  # Start with first row 
+
+    for i in range(1, data.shape[0]):
+        ema[i, :] = alpha * data[i, :] + (1 - alpha) * ema[i - 1, :]
+
+    return ema
+
+class SpaceMouseController:
+
+    def __init__(self, cfg: SpaceMouseConfig = SpaceMouseConfig()):
+
+        self.cfg = cfg
+        self.state: Optional[SpaceNavigator] = SpaceNavigator(
+            t=0.0,
+            x=0.0,
+            y=0.0,
+            z=0.0,
+            roll=0.0,
+            pitch=0.0,
+            yaw=0.0,
+            buttons=(0, 0),
+        )
+
+        self._running = False
+        self.thread = None
+
+        self.freq = 50  # Frequency Hz
+        self.dt = 1.0 / self.freq
+
+        self.hist = np.zeros((self.freq, 7))
+
+        self.success = pyspacemouse.open(
+            dof_callback=self.set_state,
+            button_callback=None,
+            button_callback_arr=[],
+        )
+
+        if self.success:
+            print("SpaceMouse connected.")
+        else:
+            print("Failed to connect to SpaceMouse.")
+
+        self.start()
+
+    def start(self):
+        """Start reading the SpaceMouse in the background."""
+        if not self._running and self.success:
+            self._running = True
+            self.thread = threading.Thread(target=self._read, daemon=True)
+            self.thread.start()
+        time.sleep(0.1)
+
+    def _read(self):
+        """Read input in a loop and update the last state."""
+        while self._running and self.success:
+            pyspacemouse.read()
+            time.sleep(self.dt)
+
+    def stop(self):
+        """Stop reading and close the SpaceMouse."""
+        if self._running:
+            self._running = False
+            if self.thread is not None:
+                self.thread.join()  # Wait for the thread to finish
+                del self.thread
+            pyspacemouse.close()  # Close the SpaceMouse device when stopping
+            print("SpaceMouse disconnected.")
+
+    def set_state(self, state):
+        self.state = state
+
+    def read(self, as_dict=False):
+
+        if as_dict:
+            print(type(self.state))
+            return self.state._asdict()
+
+        else:  # x,y,z,roll,pitch,yaw,gripper
+            gripper = self.state.buttons
+            gripper = (-1 * gripper[0] + gripper[1])
+            out = np.array([
+                self.state.x,
+                self.state.y,
+                self.state.z,
+                self.state.pitch,
+                self.state.yaw,
+                self.state.roll,
+                gripper,
+            ])
+            out = out*self.cfg.scale*self.cfg.flip
+            out = out[self.cfg.order]
+
+            self.hist = np.roll(self.hist, -1, axis=0) # smooth
+            self.hist[-1] = out
+            out = ema_2d(self.hist, 10)[-1]
+            return out
 
 
 class Controller(ABC):
@@ -143,15 +273,6 @@ class ScriptedController(Controller):
         self.action = 1
 
 
-from pprint import pprint
-from typing import Any, Dict, Optional
-
-import jax
-import json_numpy
-import numpy as np
-import requests
-
-
 class ModelController(Controller):
     def __init__(self, ip, port, ensemble=True):
         self.server = ip
@@ -216,3 +337,14 @@ def build_controller(mode="scripted"):
         return ModelController()
     else:
         raise ValueError(f"Invalid mode: {mode}")
+
+
+def main():
+    sm = SpaceMouseController()
+    while True:
+        print(sm.read().round(4))
+        time.sleep(0.1)
+
+
+if __name__ == "__main__":
+    main()
