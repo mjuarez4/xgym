@@ -4,6 +4,7 @@ import random
 import time
 from dataclasses import dataclass, field
 
+import cv2
 import draccus
 import envlogger
 import gymnasium as gym
@@ -72,8 +73,17 @@ def main():
     # env: Base = gym.make("luc-base")
 
     # env = gym.make("xgym/stack-v0")
-    _env = Lift(mode="manual")
+    _env = Lift(manual=True, out_dir=cfg.data_dir)
 
+    """
+    while True:
+        imgs = _env.look()
+        imgs = np.concatenate(list(imgs.values()), axis=1)
+        cv2.imshow("image", cv2.cvtColor(imgs, cv2.COLOR_RGB2BGR))
+        cv2.waitKey(50)
+    """
+
+    """
     with envlogger.EnvLogger(
         DMEnvFromGym(_env),
         backend=TFDSWriter(
@@ -83,10 +93,14 @@ def main():
             ds_config=dataset_config,
         ),
     ) as env:
+    """
+    with _env as env:
 
-        for _ in tqdm(range(25),desc="episodes"):
+        for _ in tqdm(range(100), desc="episodes"):
 
             env.reset()
+            time.sleep(0.2)
+            env.start_record()
 
             ### planner algorithm
             p1 = _env.p1
@@ -95,36 +109,18 @@ def main():
             p1.aa = bd.minimize(p1.aa)
             ready.aa = bd.minimize(ready.aa)
 
-            # go to p1 in 3 steps
-            n = random.randint(4, 10)
-            n = random.randint(3, 5)
-            # steps = [(p1 * a) + (ready * (1 - a)) for a in np.linspace(0, 1, n)]
-            steps = [((p1-ready) * (1/n) ) for _ in range(n)]
-
-            steps = [s.to_vector() for s in steps]
-
-            print([[round(a, 4) for a in step] for step in steps])
-
-            print(ready.aa)
-            print(p1.aa)
-            assert [abs(a) < np.pi/2 for a in ready.aa]
-            assert [abs(a) < np.pi/2 for a in p1.aa]
-
-            for s in steps:
-                print()
-                print(s)
-                # absolute = _env.kin_fwd(s) + [0]
-                # act = np.array(absolute) - _env.position.to_vector()
-                s[-1] = 1
-                s[3:6] = 0
-                print(s)
-                env.step(s.astype(np.float64))
+            action = p1.to_vector() - ready.to_vector()
+            action[3:6] = 0
+            action[-1] = 1
+            env.step(action)
 
             CUBE_W = 280
             grip = CUBE_W / _env.GRIPPER_MAX
             # env.step(np.array([0, 0, 0, 0, 0, 0, grip]).astype(np.float64))
             env.step(np.array([0, 0, 100, 0, 0, 0, grip]).astype(np.float64))
 
+            env.stop_record()
+            env.flush()
             _env.auto_reset()
 
     # super(_env).reset()

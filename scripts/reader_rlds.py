@@ -30,7 +30,7 @@ def overlay_palm(img, x, y, opacity, size=None):
 
     # Define circle properties
     center = (x, y)
-    radius = int(size/2) if size is not None else 10
+    radius = int(size / 2) if size is not None else 10
     color = (255, 255, 255)
     thickness = -1
 

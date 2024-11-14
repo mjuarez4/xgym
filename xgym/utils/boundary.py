@@ -1,6 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pprint import pformat
 from typing import List, Optional, Union
 
 import numpy as np
@@ -18,18 +19,24 @@ def minimize(a: np.array) -> np.array:
     when > np.pi/2 or < -np.pi/2, it returns the equivalent angle in the range [-np.pi/2, np.pi/2]
     """
 
-    # logger.debug(f"minimizing {a}")
+    # logger.info(f"minimizing {a}")
+    limit = np.pi  # pi is 180 degrees
+
     def _min(x):
-        if x > np.pi / 2:
-            return -np.pi + (x % np.pi)
-        elif x < -np.pi / 2:
-            return np.pi + (x % np.pi)
-        return x
+        # Use modulo to wrap x within [-π, π]
+        sign = np.sign(x)
+        out = (x + np.pi) % (2 * np.pi) - np.pi
+        return out if np.sign(out) == sign else -out
 
+        # return np.arctan2(np.sin(x), np.cos(x))
 
-    a = np.array([_min(x%np.pi) for x in a])
-    # logger.debug(f"minimized {a}")
+    a = np.array([_min(x) for x in a])
+    # logger.info(f"minimized {a}")
     return a
+
+
+def minimize(a):
+    return np.mod(a, 2 * np.pi) 
 
 
 # @dataclass(frozen=True)
@@ -43,6 +50,9 @@ class PartialRobotState:
     gripper: Optional[Union[float, np.ndarray]] = None
     joints: Optional[Union[List[float], np.ndarray]] = None
     aa: Optional[Union[List[float], np.ndarray]] = None
+
+    def __post_init__(self):
+        self.aa = minimize(self.aa) if self.aa is not None else None
 
     @staticmethod
     def from_vector(vector: np.ndarray) -> "PartialRobotState":
@@ -64,7 +74,7 @@ class PartialRobotState:
 
     def __add__(self, other: "PartialRobotState") -> "PartialRobotState":
         """assumes the second robot state is a delta"""
-        logger.warn("double check for correctness adding aa")
+        # logger.warn("double check for correctness adding aa")
 
         things = {}
         for key in self.__annotations__:
@@ -80,7 +90,7 @@ class PartialRobotState:
 
     def __sub__(self, other: "PartialRobotState") -> "PartialRobotState":
         """assumes the second robot state is a delta"""
-        logger.warn("double check for correctness subtracting aa")
+        # logger.warn("double check for correctness subtracting aa")
 
         things = {}
         for key in self.__annotations__:
@@ -95,7 +105,7 @@ class PartialRobotState:
         return PartialRobotState(**things)
 
     def __mul__(self, other: float) -> "PartialRobotState":
-        logger.warn("double check for correctness multiplying aa")
+        # logger.warn("double check for correctness multiplying aa")
 
         things = {}
         for key in self.__annotations__:
@@ -117,7 +127,7 @@ class Boundary(ABC):
 
 class Identity(Boundary):
     def contains(self, state: PartialRobotState) -> bool:
-        logger.warning("Identity boundary always returns True")
+        logger.warn("Identity boundary always returns True")
         return True
 
 
@@ -143,7 +153,7 @@ class CartesianBoundary(Boundary):
             f"{self.min.cartesian} <= {state.cartesian} <= {self.max.cartesian}"
         )
 
-        logger.info(
+        logger.debug(
             f"CARTESIAN {np.logical_and( (self.min.cartesian <= state.cartesian), (state.cartesian <= self.max.cartesian),)}"
         )
 
@@ -161,6 +171,22 @@ class CartesianBoundary(Boundary):
         )
 
 
+def is_angle_between(target, start, end, epsilon=0):
+    # Normalize all angles to [0, 2π]
+
+    target = target % (2 * np.pi)
+    start = start % (2 * np.pi)
+    end = end % (2 * np.pi)
+
+    print('is_angle_between')
+    print(np.array([start, target, end]).round(4))
+    # Check if target is between start and end, handling wrap-around at 0
+    if start < end:
+        return start - epsilon <= target <= end + epsilon
+    else:
+        return target >= start - epsilon or target <= end + epsilon
+
+
 @dataclass
 class AngularBoundary(Boundary):
 
@@ -171,17 +197,45 @@ class AngularBoundary(Boundary):
         assert len(self.min.aa) == 3
         assert len(self.max.aa) == 3
 
+        self.min.aa = minimize(self.min.aa)
+        self.max.aa = minimize(self.max.aa)
+
+        # re check min and max
+        # stack = np.stack([self.min.aa, self.max.aa])
+        # self.min.aa = stack.min(axis=0)
+        # self.max.aa = stack.max(axis=0)
+
+    def is_between(self, x, a, b):
+        """Checks if x is between a and b, inclusive, regardless of their order."""
+        return np.logical_and(x >= np.minimum(a, b), x <= np.maximum(a, b))
+
     def contains(self, state: PartialRobotState) -> bool:
         """Checks if the given point is inside the bounding box."""
-        clean = lambda x: np.where((x > np.pi) | (x < -np.pi), x % np.pi, x)
-        logger.debug(f"{self.min.aa} <= {clean(state.aa)} <= {self.max.aa}")
-        return np.logical_and(
-            (self.min.aa <= clean(state.aa)),
-            (clean(state.aa) <= self.max.aa),
-        ).all()
+
+        state.aa = minimize(state.aa)
+
+        # clean = lambda x: np.where((x > np.pi) | (x < -np.pi), x % np.pi, x)
+
+        logger.info(f"between axb {np.stack([self.min.aa, state.aa, self.max.aa])}")
+
+        # between =  self.is_between(minimize(state.aa), self.min.aa, self.max.aa)
+
+        between = [
+            is_angle_between(x, a, b)
+            for x, a, b in zip(state.aa, self.min.aa, self.max.aa)
+        ]
+        between = np.array(between)
+
+        all = between.all()
+
+        if not all:
+            logger.info(f"ANGULAR {between}")
+        return all
 
     def clip(self, state: PartialRobotState) -> PartialRobotState:
         """Clips the given state to the bounding box."""
+
+        print(minimize(state.aa))
         return PartialRobotState(
             cartesian=state.cartesian,
             aa=np.clip(state.aa, self.min.aa, self.max.aa),
@@ -253,13 +307,22 @@ class AND(CompositeBoundary):
 
     def contains(self, state: PartialRobotState) -> bool:
         c = [b.contains(state) for b in self.bounds]
-        logger.info(f"AND: {c}")
+        logger.debug(f"AND: {c}")
         return all(c)
 
     def clip(self, state: PartialRobotState) -> PartialRobotState:
         for b in self.bounds:
             state = b.clip(state)
         return state
+
+    def to_dict(self):
+        return {"AND": self.bounds}
+
+    def __repr__(self):
+        return str(self.to_dict())
+
+    def __str__(self):
+        return pformat(self.to_dict())
 
 
 class OR(CompositeBoundary):

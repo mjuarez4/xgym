@@ -1,3 +1,4 @@
+import os
 from typing import List
 
 import cv2
@@ -19,16 +20,16 @@ def resize_all(imgs: List[np.array]):
 
 
 def list_cameras():
-    index = 0
-    arr = {}
-    while index < 20:
-        cap = cv2.VideoCapture(index)
+
+    cams = {}
+    videos = [x for x in os.listdir("/dev/") if "video" in x]
+
+    for i, _ in enumerate(videos):
+        cap = cv2.VideoCapture(i)
         if cap.read()[0]:
             cap.set(cv2.CAP_PROP_FPS, 60)
-            arr[index] = cap
-            # cap.release()
-        index += 1
-    return arr
+            cams[i] = cap
+    return cams
 
 
 def save_frames(frames, path, ext="mp4", fps=30):
@@ -36,3 +37,22 @@ def save_frames(frames, path, ext="mp4", fps=30):
     with imageio.get_writer(path, fps=fps) as writer:
         for frame in frames:
             writer.append_data(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+
+def tile(imgs:dict):
+    return np.concatenate(list(imgs.values()), axis=1)
+
+
+def writekeys(imgs):
+    return {
+        x: cv2.putText(
+            imgs[x],
+            f"{x}",
+            (0, 25),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 0),
+            2,
+        )
+        for x in imgs
+    }
