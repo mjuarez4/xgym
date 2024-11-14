@@ -68,7 +68,7 @@ for e in tqdm(ds):
 
         act = e["robot.position"][i + 1] - e["robot.position"][i]
         act[:3] = act[:3] / int(1e3)
-        act[3:6] = 0.0
+        # act[3:6] = 0.0
         act[-1] = e["robot.position"][i][-1] / 850
         # print(act)
 
@@ -103,7 +103,7 @@ for e in tqdm(ds):
         cv2.imshow("img", cv2.cvtColor(imgs, cv2.COLOR_RGB2BGR))
         # cv2.waitKey(0)
         cv2.waitKey(10)
-        cv2.waitKey(50)
+        # cv2.waitKey(50)
 
     # last one just for show ... no action
     i = -1

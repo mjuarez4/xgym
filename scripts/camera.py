@@ -17,6 +17,8 @@ def main():
     fps = 30
     dt = 1 / fps
 
+    # pop all but one cam
+
     print(cams)
     frames = []
     while True:

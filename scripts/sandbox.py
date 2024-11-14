@@ -88,7 +88,7 @@ def main():
         obs = env.reset()
         env.set_mode(7)
         time.sleep(0.4)
-        # env.start_record()
+        env.start_record()
 
         # timestep = env.reset()
         # obs = timestep.observation
@@ -145,6 +145,7 @@ def main():
         env.flush()
         # env.auto_reset()
 
+    env.reset()
     env.close()
 
     quit()
