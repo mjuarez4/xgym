@@ -217,8 +217,8 @@ class Base(gym.Env):
                 "mvtime": None,
             },
             "joint": {
-                "v": np.pi / 4,  # rad/s
-                "a": np.pi / 4,  # rad/s^2
+                "v": np.pi / 5,  # rad/s
+                "a": np.pi / 5,  # rad/s^2
                 "mvtime": None,
             },
         }
@@ -451,23 +451,52 @@ class Base(gym.Env):
             logger.info("skipping gripper for speed")
 
         print(f"waiting: {wait}")
-        if wait:
+        if wait :
             self.robot.set_position(
                 x=act.cartesian[0],
                 y=act.cartesian[1],
                 z=act.cartesian[2],
+                roll=act.aa[0],
+                pitch=act.aa[1],
+                yaw=act.aa[2],
                 relative=True,
                 # speed=60,
                 wait=wait,
             )
-        else:
+        else:  # no wait for online planning
+            pos = self.position
+            print(f"rpy: {pos.aa} -> {act.aa}")
+
             self.robot.set_position(
                 x=act.cartesian[0] + self.cartesian[0],
                 y=act.cartesian[1] + self.cartesian[1],
                 z=act.cartesian[2] + self.cartesian[2],
+                roll=act.aa[0] + pos.aa[0],
+                pitch=act.aa[1] + pos.aa[1],
+                yaw=act.aa[2] + pos.aa[2],
                 relative=False,
                 wait=wait,
             )
+
+    def send(self, action):
+        """only for spacemouse"""
+
+        # save time?
+        g = action[-1]
+        if g < 0.9 or (self.gripper / self.GRIPPER_MAX) < 0.9:
+            self.robot.set_gripper_position(g * self.GRIPPER_MAX, wait=False)
+        else:
+            logger.info("skipping gripper for speed")
+
+        self.set_mode(5)
+        assert self.mode == 5
+        self.robot.vc_set_cartesian_velocity(
+            action[:-1],
+            is_radian=True,
+            is_tool_coord=False,
+            duration=-1,
+            # **kwargs,
+        )
 
     @timer
     def look(self):
@@ -502,6 +531,8 @@ class Base(gym.Env):
         new = self.position + act
         new.gripper = act.gripper
         logger.warn(self.boundary.contains(new))
+
+        logger.warn(f"{self.position.aa}+{act.aa}={new.aa}")
 
         if not self.boundary.contains(new):
             try:
@@ -630,6 +661,7 @@ class Base(gym.Env):
     def set_mode(self, mode):
         if mode == 2:
             self.robot.set_mode(2, detection_param=1)
+            self.robot.set_teach_sensitivity(1, wait=True)
         else:
             self.robot.set_mode(mode)
 

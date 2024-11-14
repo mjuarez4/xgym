@@ -24,16 +24,32 @@ class SpaceMouseConfig:
 
     # sensitivity
     scale = np.array([
-        10.0,
-        10.0,
-        10.0,
-        0.1,
-        0.1,
-        0.1,
+        5.0,
+        5.0,
+        5.0,
+        0.02,
+        0.02,
+        0.02,
         100,
     ])
     flip = [1,1,1,-1,-1,-1,1]
-    order = [0, 1, 2, 5, 3, 4, 6]
+    order = [0, 1, 2, 3, 5, 4, 6]
+
+class VelocitySMC(SpaceMouseConfig):
+
+    # xyz, rpy, gripper
+    # rpy is rotation along x, y, z
+    scale = np.array([
+        100.0,
+        100.0,
+        100.0,
+        0.5,
+        0.5,
+        0.5,
+        100,
+    ])
+    flip = [1,1,1,-1,1,-1,1]
+    order = [0, 1, 2, 3, 5, 4, 6]
 
 
 def ema_2d(data, window):
@@ -50,7 +66,7 @@ def ema_2d(data, window):
 
 class SpaceMouseController:
 
-    def __init__(self, cfg: SpaceMouseConfig = SpaceMouseConfig()):
+    def __init__(self, cfg: SpaceMouseConfig = VelocitySMC()):
 
         self.cfg = cfg
         self.state: Optional[SpaceNavigator] = SpaceNavigator(
@@ -67,7 +83,7 @@ class SpaceMouseController:
         self._running = False
         self.thread = None
 
-        self.freq = 50  # Frequency Hz
+        self.freq = 300  # Frequency Hz
         self.dt = 1.0 / self.freq
 
         self.hist = np.zeros((self.freq, 7))
@@ -130,12 +146,15 @@ class SpaceMouseController:
                 self.state.roll,
                 gripper,
             ])
+            out = out[self.cfg.order] 
+            out = out ** 2 * np.sign(out)
             out = out*self.cfg.scale*self.cfg.flip
-            out = out[self.cfg.order]
 
             self.hist = np.roll(self.hist, -1, axis=0) # smooth
             self.hist[-1] = out
-            out = ema_2d(self.hist, 10)[-1]
+            # out = ema_2d(self.hist, 10)[-1]
+
+            # out = np.where(out > self.hist[-2], out, 0)
             return out
 
 

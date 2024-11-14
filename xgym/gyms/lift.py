@@ -55,6 +55,7 @@ class Lift(Base):
             ]
         )
 
+
     def reset(self):
         ret = super().reset()
 
@@ -89,7 +90,7 @@ class Lift(Base):
             rand = np.random.randint(10, 50, size=2) * mod
             rand[1] *= np.random.choice([1, 1.5, 2], size=1) if rand[1] < 0 else 1
             rand = rand.tolist()
-            randy = -abs(np.random.randint(10, 350, size=1) * mod)
+            randy = -abs(np.random.randint(10, 300, size=1) * mod)
 
             print(rand)
             step = np.array([rand[0], randy[0], rand[1], 0, 0, 0, 1])
