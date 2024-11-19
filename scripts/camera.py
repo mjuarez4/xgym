@@ -1,10 +1,30 @@
 import time
+from pprint import pprint
 
 import cv2
 import imageio
 import numpy as np
+import pyudev
 
 from xgym.utils import camera as cu
+
+context = pyudev.Context()
+
+import pandas as pd
+
+df = []
+for device in context.list_devices(subsystem="video4linux"):
+    df.append({
+        "path": device.device_node,
+        "serial": device.get("ID_SERIAL_SHORT"),
+        "model": device.get("ID_MODEL"),
+    })
+
+df = pd.DataFrame(df)
+# sort by int(path.split("/")[-1].replace("video", ""))
+df = df.sort_values(by="path", key=lambda x: x.str.split("/").str[-1].str.replace("video", "").astype(int))
+
+print(df)
 
 
 def main():
@@ -26,11 +46,15 @@ def main():
         tic = time.time()
 
         _ = [cam.grab() for cam in cams.values()]
-        imgs = [im for (ret, im) in [cam.retrieve() for cam in cams.values()]]
-        imgs = [cu.square(f) for f in imgs]
+        imgs = {
+            k: im
+            for k, (ret, im) in {k: cam.retrieve() for k, cam in cams.items()}.items()
+        }
+        imgs = {k: cu.square(f) for k, f in imgs.items()}
+        imgs = cu.writekeys(imgs)
 
         # resize by the biggest dimension of frames
-        imgs = cu.resize_all(imgs)
+        imgs = cu.resize_all(list(imgs.values()))
         frame = np.concatenate(imgs, axis=1)
 
         frames.append(frame)

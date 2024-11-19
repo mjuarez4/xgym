@@ -22,7 +22,7 @@ class Lift(Base):
         self._proceed = False
 
         self.kb = KeyboardController()
-        self.kb.register(keyboard.Key.space, lambda: self.stop(toggle=True))
+        self.kb.register(keyboard.Key.space, lambda: [self.set_mode(2),self.set_mode(2)])
         self.kb.register(keyboard.Key.enter, lambda: self.proceed())
 
         def _set_done():
@@ -41,20 +41,19 @@ class Lift(Base):
                     min=RS(cartesian=[120, -450, -25]),  # -500 give kinematic error
                     max=RS(cartesian=[500, -180, 300]),  # y was -250
                 ),
-                bd.AngularBoundary(
-                    min=RS(
-                        aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2])
-                        + self.start_angle
-                    ),
-                    max=RS(
-                        aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2])
-                        + self.start_angle
-                    ),
-                ),
+                # bd.AngularBoundary(
+                # min=RS(
+                # aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2])
+                # + self.start_angle
+                # ),
+                # max=RS(
+                # aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2])
+                # + self.start_angle
+                # ),
+                # ),
                 bd.GripperBoundary(min=10 / 850, max=1),
             ]
         )
-
 
     def reset(self):
         ret = super().reset()

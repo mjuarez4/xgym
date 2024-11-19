@@ -1,5 +1,6 @@
 import os
-from typing import List
+
+from typing import List, Dict, Union
 
 import cv2
 import imageio
@@ -24,7 +25,7 @@ def list_cameras():
     cams = {}
     videos = [x for x in os.listdir("/dev/") if "video" in x]
 
-    for i, _ in enumerate(videos):
+    for i in range(len(videos) + 4):
         cap = cv2.VideoCapture(i)
         if cap.read()[0]:
             cap.set(cv2.CAP_PROP_FPS, 60)
@@ -39,8 +40,11 @@ def save_frames(frames, path, ext="mp4", fps=30):
             writer.append_data(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
 
-def tile(imgs:dict):
-    return np.concatenate(list(imgs.values()), axis=1)
+def tile(imgs: Union[Dict, List]):
+    if isinstance(imgs, dict):
+        return np.concatenate(list(imgs.values()), axis=1)
+    if isinstance(imgs, list):
+        return np.concatenate(imgs, axis=1)
 
 
 def writekeys(imgs):
