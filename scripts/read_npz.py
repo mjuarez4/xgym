@@ -6,19 +6,14 @@ from pprint import pprint
 
 import cv2
 import draccus
-import envlogger
 import gymnasium as gym
 import jax
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
-from bsuite.utils.gym_wrapper import DMEnvFromGym, GymFromDMEnv
-from envlogger.backends.tfds_backend_writer import \
-    TFDSBackendWriter as TFDSWriter
-from envlogger.testing import catch_env
+# from bsuite.utils.gym_wrapper import DMEnvFromGym, GymFromDMEnv
 from pynput import keyboard
 from tqdm import tqdm
-
 from xgym.controllers import (KeyboardController, ModelController,
                               ScriptedController)
 from xgym.gyms import Base
@@ -90,7 +85,7 @@ for e in tqdm(ds):
         imgs = {
             x: cv2.putText(
                 imgs[x],
-                f'{x}',
+                f"{x}",
                 (0, 25),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
