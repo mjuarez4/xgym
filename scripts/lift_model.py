@@ -70,6 +70,7 @@ def main():
 
     # env: Base = gym.make("luc-base")
 
+    # @ethan TODO make this a configurable parameter? see scripts/reader_rlds and github.com/dlwh/draccus
     #model = ModelController("carina.cs.luc.edu", 8001, ensemble=True)
     #model = ModelController("aisec-102.cs.luc.edu", 8001, ensemble=True)
     model = ModelController("dijkstra.cs.luc.edu", 8001, ensemble=True)

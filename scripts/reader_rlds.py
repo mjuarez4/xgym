@@ -11,13 +11,28 @@ from xgym.rlds.util import add_col, remove_col
 from xgym.rlds.util.render import render_openpose
 
 
+import enum
+
+class Task(enum.Enum):
+    LIFT = "lift"
+    DUCK = "duck"
+
+class Embodiment(enum.Enum):
+    SINGLE = "single"
+    MANO = "mano"
+
 @dataclass
 class Reader:
 
-    embodiment: Union["single", "mano"] = "mano"
+    embodiment: Embodiment = Embodiment.SINGLE
+    task: Task = Task.DUCK
     verbose: bool = False
     visualize: bool = True
 
+    def __post_init__(self):
+        for k, v in self.__dict__.items():
+            if isinstance(v, enum.Enum):
+                setattr(self, k, v.value)
 
 def overlay(orig, img, opacity):
     alpha = 1 - (0.2 * opacity)
@@ -46,7 +61,9 @@ def main():
 
     cfg = Reader()
 
-    ds = tfds.load(f"xgym_lift_{cfg.embodiment}")["train"]
+    name = f"xgym_{cfg.task}_{cfg.embodiment}"
+    print(f"Loading {name} dataset")
+    ds = tfds.load(name)["train"]
 
     for ep in ds:
         steps = [x for x in ep["steps"]]
