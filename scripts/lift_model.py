@@ -70,7 +70,9 @@ def main():
 
     # env: Base = gym.make("luc-base")
 
-    model = ModelController("carina.cs.luc.edu", 8001, ensemble=True)
+    #model = ModelController("carina.cs.luc.edu", 8001, ensemble=True)
+    #model = ModelController("aisec-102.cs.luc.edu", 8001, ensemble=True)
+    model = ModelController("dijkstra.cs.luc.edu", 8001, ensemble=True)
     model.reset()
 
     # env = gym.make("xgym/stack-v0")
