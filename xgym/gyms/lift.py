@@ -87,7 +87,7 @@ class Lift(Base):
             # random starting position
             mod = np.random.choice([-1, 1], size=2)
             rand = np.random.randint(10, 50, size=2) * mod
-            rand[1] *= np.random.choice([1, 1.5, 2], size=1) if rand[1] < 0 else 1
+            rand[1] *= np.random.choice([2,3,4], size=1) if rand[1] < 0 else 1
             rand = rand.tolist()
             randy = -abs(np.random.randint(10, 300, size=1) * mod)
 
