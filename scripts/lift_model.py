@@ -71,8 +71,8 @@ def main():
     # env: Base = gym.make("luc-base")
 
     #model = ModelController("carina.cs.luc.edu", 8001, ensemble=True)
-    #model = ModelController("aisec-102.cs.luc.edu", 8001, ensemble=True)
-    model = ModelController("dijkstra.cs.luc.edu", 8001, ensemble=True)
+    model = ModelController("aisec-102.cs.luc.edu", 8001, ensemble=True)
+    #model = ModelController("dijkstra.cs.luc.edu", 8001, ensemble=True)
     model.reset()
 
     # env = gym.make("xgym/stack-v0")
@@ -104,8 +104,8 @@ def main():
 
                 print(obs["img"].keys())
 
-                myimg = obs["img"]["camera_10"]
-                primary = obs["img"]["camera_6"]
+                myimg = obs["img"]["camera_6"]
+                primary = obs["img"]["camera_10"]  #switched these (cam10->cam6, cam6->cam10) for 133026 eval
 
                 cv2.imshow(
                     "data Environment",
@@ -124,7 +124,7 @@ def main():
                         tic = time.time() if a else tic
                         action[:3] *= int(1e3)
                         print(action.shape)
-                        # action[3:6] = 0
+                        action[3:6] = 0
                         action[-1] = 0.2 if action[-1] < 0.8 else 1  # less gripper
                         # action = action / 2
                         print(f"action: {[round(x,4) for x in action.tolist()]}")
@@ -134,9 +134,11 @@ def main():
                         toc = time.time()
                         elapsed = toc - tic
                         time.sleep(max(0, dt - elapsed))  # 5hz
-
+                        print("ensembling") 
                 else:
+                      
                     action = actions
+                    action[3:6] = 0
                     action[:3] *= int(1e3)
                     action[-1] = 0.2 if action[-1] < 0.8 else 1  # less gripper
                     print(f"action: {[round(x,2) for x in action.tolist()]}")
@@ -154,7 +156,7 @@ def main():
 
             env.stop_record()
             env.flush()
-            env.auto_reset()
+            #env.auto_reset()
 
     env.close()
     _env.close()

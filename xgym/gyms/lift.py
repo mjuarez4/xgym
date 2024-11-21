@@ -41,16 +41,16 @@ class Lift(Base):
                     min=RS(cartesian=[120, -450, -25]),  # -500 give kinematic error
                     max=RS(cartesian=[500, -180, 300]),  # y was -250
                 ),
-                bd.AngularBoundary(
-                    min=RS(
-                        aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2])
-                        + self.start_angle
-                    ),
-                    max=RS(
-                        aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2])
-                        + self.start_angle
-                    ),
-                ),
+                #bd.AngularBoundary(
+                 #   min=RS(
+                  #      aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2])
+                   #     + self.start_angle
+                   # ),
+                   # max=RS(
+                   #     aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2])
+                   #     + self.start_angle
+                   # ),
+               # ),
                 bd.GripperBoundary(min=10 / 850, max=1),
             ]
         )

@@ -187,16 +187,16 @@ class Base(gym.Env):
                     min=RS(cartesian=[350, -350, 1]),
                     max=RS(cartesian=[500, -75, 300]),
                 ),
-                bd.AngularBoundary(
-                    min=RS(
-                        aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2])
-                        + self.start_angle
-                    ),
-                    max=RS(
-                        aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2])
-                        + self.start_angle
-                    ),
-                ),
+                #bd.AngularBoundary(
+                 #   min=RS(
+                 #       aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2])
+                 #       + self.start_angle
+                 #   ),
+                 #   max=RS(
+                 #       aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2])
+                 #       + self.start_angle
+                 #   ),
+               # ),
                 # bd.GripperBoundary(min=10, max=800),
                 bd.GripperBoundary(min=self.GRIPPER_MIN / self.GRIPPER_MAX, max=1),
             ]
