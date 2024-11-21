@@ -244,9 +244,7 @@ class Base(gym.Env):
         self.out_dir = osp.expanduser(out_dir)
 
         self._done = False
-        self.rest_torque = np.array(
-            [6.4566, 34.0884, 5.2632, 21.6801, 2.1573, 3.8316, 2.0514]
-        )
+        self.limit_torque = np.array([15, 45, 10, 25, 5, 5, 5])
 
     def _init_cameras(self):
         logger.info("Initializing cameras.")
@@ -493,6 +491,8 @@ class Base(gym.Env):
                 wait=wait,
             )
 
+        # self.safety_torque_limit()
+
     def send(self, action):
         """only for spacemouse"""
 
@@ -540,12 +540,18 @@ class Base(gym.Env):
         elif mode == "rgb_array":
             return imgs
 
+    def safety_torque_limit(self):
+        t = np.abs(self.torque)
+        if np.any(t > self.limit_torque):
+            logger.error(f'torque limit reached: {t}')
+            self.set_mode(2)
+            time.sleep(0.01)
+            self.set_mode(2)
+            raise ValueError("Torque limit exceeded")
+
     def safety_check(self, action):
 
-        # torque_diff = np.abs(self.torque) / np.abs(self.rest_torque) + 1e-8
-        # if np.any(torque_diff > 1.5):
-        # self.set_mode(2)
-        # raise ValueError("Torque limit exceeded")
+        # self.safety_torque_limit()
 
         logger.debug(self.position)
         act = RS.from_vector(action)
@@ -693,7 +699,7 @@ class Base(gym.Env):
 
         self.robot.set_state(0)
         self.mode = mode
-        time.sleep(0.1)
+        time.sleep(0.01)
         logger.info(f"mode: {self.robot.mode} | state: {self.robot.state}")
 
     def stop(self, toggle=False):
