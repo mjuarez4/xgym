@@ -5,20 +5,16 @@ from dataclasses import dataclass, field
 from pprint import pprint
 
 import cv2
-import draccus
 import gymnasium as gym
 import jax
 import numpy as np
 import tensorflow as tf
-import tensorflow_datasets as tfds
 # from bsuite.utils.gym_wrapper import DMEnvFromGym, GymFromDMEnv
-from pynput import keyboard
+# from pynput import keyboard
 from tqdm import tqdm
-from xgym.controllers import (KeyboardController, ModelController,
-                              ScriptedController)
-from xgym.gyms import Base
-from xgym.utils import boundary as bd
-from xgym.utils.boundary import PartialRobotState as RS
+
+import draccus
+import tensorflow_datasets as tfds
 
 
 @dataclass
