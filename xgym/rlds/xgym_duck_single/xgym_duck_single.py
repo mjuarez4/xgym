@@ -191,17 +191,13 @@ class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
     def _generate_examples(self, ds) -> Iterator[Tuple[str, Any]]:
         """Generator of examples for each split."""
 
-        # self._embed = hub.load(
-            # "https://tfhub.dev/google/universal-sentence-encoder-large/5"
-        # )
-        task = "put the ducks into the basket"  # hardcoded for now
-        # lang = self._embed([task])[0].numpy()  # embedding takes ≈0.06s
-        lang = np.zeros(512).astype(np.float32)
+        taskfile = next(Path().cwd().glob('*.npy'))
+        task = taskfile.stem.replace('_', ' ')
+        lang = np.load(taskfile)
 
         def _parse_example(path):
 
             # assemble episode --> here we're assuming demos so we set reward to 1 at the end
-            print(path)
             ep = np.load(str(path))
             ep = self.dict_unflatten({x: ep[x] for x in ep.files})
 
