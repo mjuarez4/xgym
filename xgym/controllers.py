@@ -23,46 +23,52 @@ from pyspacemouse.pyspacemouse import SpaceNavigator
 class SpaceMouseConfig:
 
     # sensitivity
-    scale = np.array([
-        5.0,
-        5.0,
-        5.0,
-        0.02,
-        0.02,
-        0.02,
-        100,
-    ])
-    flip = [1,1,1,-1,-1,-1,1]
+    scale = np.array(
+        [
+            5.0,
+            5.0,
+            5.0,
+            0.02,
+            0.02,
+            0.02,
+            100,
+        ]
+    )
+    flip = [1, 1, 1, -1, -1, -1, 1]
     order = [0, 1, 2, 3, 5, 4, 6]
+
 
 class VelocitySMC(SpaceMouseConfig):
 
     # xyz, rpy, gripper
     # rpy is rotation along x, y, z
-    scale = np.array([
-        100.0,
-        100.0,
-        100.0,
-        0.5,
-        0.5,
-        0.5,
-        100,
-    ])
-    flip = [1,1,1,-1,1,-1,1]
+    scale = np.array(
+        [
+            100.0,
+            100.0,
+            100.0,
+            0.5,
+            0.5,
+            0.5,
+            100,
+        ]
+    )
+    flip = [1, 1, 1, -1, 1, -1, 1]
     order = [0, 1, 2, 3, 5, 4, 6]
 
 
 def ema_2d(data, window):
-    """ Calculate EMA for 2D array """
+    """Calculate EMA for 2D array"""
 
     alpha = 2 / (window + 1)  # Smoothing factor
     ema = np.empty_like(data)
-    ema[0, :] = data[0, :]  # Start with first row 
+    ema[0, :] = data[0, :]  # Start with first row
 
     for i in range(1, data.shape[0]):
         ema[i, :] = alpha * data[i, :] + (1 - alpha) * ema[i - 1, :]
 
     return ema
+
 
 class SpaceMouseController:
 
@@ -136,21 +142,23 @@ class SpaceMouseController:
 
         else:  # x,y,z,roll,pitch,yaw,gripper
             gripper = self.state.buttons
-            gripper = (-1 * gripper[0] + gripper[1])
-            out = np.array([
-                self.state.x,
-                self.state.y,
-                self.state.z,
-                self.state.pitch,
-                self.state.yaw,
-                self.state.roll,
-                gripper,
-            ])
-            out = out[self.cfg.order] 
-            out = out ** 2 * np.sign(out)
-            out = out*self.cfg.scale*self.cfg.flip
+            gripper = -1 * gripper[0] + gripper[1]
+            out = np.array(
+                [
+                    self.state.x,
+                    self.state.y,
+                    self.state.z,
+                    self.state.pitch,
+                    self.state.yaw,
+                    self.state.roll,
+                    gripper,
+                ]
+            )
+            out = out[self.cfg.order]
+            # out = out**2 * np.sign(out) # make it less sensitive
+            out = out * self.cfg.scale * self.cfg.flip
 
-            self.hist = np.roll(self.hist, -1, axis=0) # smooth
+            self.hist = np.roll(self.hist, -1, axis=0)  # smooth
             self.hist[-1] = out
             # out = ema_2d(self.hist, 10)[-1]
 
@@ -302,12 +310,14 @@ class ModelController(Controller):
 
     def __call__(self, primary, high=None, wrist=None):
 
+        image = {
+            f"image_{k}": v.tolist()
+            for k, v in {"primary": primary, "left_wrist": wrist, "high": high}.items()
+            if v is not None
+        }
+
         payload = {
-            "observation": {
-                "image_primary": primary.tolist(),
-                **({"wrist": wrist.tolist()} if wrist is not None else {}),
-                **({"high": high.tolist()} if high is not None else {}),
-            },
+            "observation": {**image},
             "modality": "l",  # can we use both? there is another letter for both
             "ensemble": self.ensemble,
             "model": "bafl",
