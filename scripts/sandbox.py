@@ -31,9 +31,10 @@ from xgym.utils.boundary import PartialRobotState as RS
 @dataclass
 class RunCFG:
 
+    task: str = input("Task: ").lower()
     base_dir: str = osp.expanduser("~/data")
     time: str = time.strftime("%Y%m%d-%H%M%S")
-    env_name: str = f"xgym-sandbox-duck-v0-{time}"
+    env_name: str = f"xgym-sandbox-{task}-v0-{time}"
     data_dir: str = osp.join(base_dir, env_name)
 
 
@@ -74,16 +75,16 @@ def main():
     agent = SpaceMouseController()
 
     # env = gym.make("xgym/stack-v0")
-    env = Lift(out_dir=cfg.data_dir, random=False)
+    env = Lift(out_dir=cfg.data_dir, random=True)
 
     # ds = tfds.load("xgym_lift_single", split="train")
 
-    freq = 50  # hz
+    freq = 10  # hz
     dt = 1 / freq
 
     hist = np.zeros(7)
 
-    for ep in tqdm(range(10), desc="Episodes"):
+    for ep in tqdm(range(100), desc="Episodes"):
 
         obs = env.reset()
         env.set_mode(7)
@@ -128,7 +129,7 @@ def main():
             env.send(action)
 
             # obs, done, info = env.observation(), False, {}
-            done = False
+            done = env._done
 
             toc = time.time()
             elapsed = toc - tic
