@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from pprint import pprint
+import draccus
 from typing import Union
 
 import cv2
@@ -25,7 +27,7 @@ class Embodiment(enum.Enum):
 class Reader:
 
     embodiment: Embodiment = Embodiment.SINGLE
-    task: Task = Task.DUCK
+    task: Task = Task.LIFT
     verbose: bool = False
     visualize: bool = True
 
@@ -57,9 +59,10 @@ def overlay_palm(img, x, y, opacity, size=None):
     return blended
 
 
-def main():
-
-    cfg = Reader()
+@draccus.wrap()
+def main(cfg: Reader):
+    pprint(cfg)
+    quit()
 
     name = f"xgym_{cfg.task}_{cfg.embodiment}"
     print(f"Loading {name} dataset")
