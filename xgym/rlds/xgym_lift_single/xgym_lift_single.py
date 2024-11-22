@@ -217,7 +217,6 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
 
                 act = next["proprio"]["position"] - step["proprio"]["position"]
                 act[:3] = act[:3] / int(1e3)
-                act[3:6] = 0
                 act[-1] = step["proprio"]["position"][-1] / 850
 
                 # if norm is less than eps
