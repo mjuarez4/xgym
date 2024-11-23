@@ -1,6 +1,5 @@
 import os
-
-from typing import List, Dict, Union
+from typing import Dict, List, Union
 
 import cv2
 import imageio
@@ -47,16 +46,16 @@ def tile(imgs: Union[Dict, List]):
         return np.concatenate(imgs, axis=1)
 
 
-def writekeys(imgs):
+def writekeys(imgs: Dict):
     return {
-        x: cv2.putText(
-            imgs[x],
-            f"{x}",
+        k: cv2.putText(
+            imgs[k],
+            f"{k}",
             (0, 25),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
             (255, 255, 0),
             2,
         )
-        for x in imgs
+        for k in imgs
     }
