@@ -10,29 +10,6 @@ import tensorflow_datasets as tfds
 import tensorflow_hub as hub
 
 
-def downscale_to_224(height: int, width: int) -> Tuple[int, int]:
-    """
-    Downscale the image so that the shorter dimension is 224 pixels,
-    and the longer dimension is scaled by the same ratio.
-
-    Args:
-        height (int): The height of the image.
-        width (int): The width of the image.
-
-    Returns:
-        Tuple[int, int]: The new height and width of the image.
-    """
-    # Determine the scaling ratio
-    if height < width:
-        ratio = 224.0 / height
-        new_height = 224
-        new_width = int(width * ratio)
-    else:
-        ratio = 224.0 / width
-        new_width = 224
-        new_height = int(height * ratio)
-
-    return new_height, new_width
 
 
 class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
@@ -58,19 +35,19 @@ class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
                                 {
                                     "image": tfds.features.FeaturesDict(
                                         {
-                                            "camera_6": tfds.features.Image(
+                                            "window": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
                                                 doc="Main camera RGB observation.",
                                             ),
-                                            "camera_8": tfds.features.Image(
+                                            "front_r": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
                                                 doc="Main camera RGB observation.",
                                             ),
-                                            "camera_10": tfds.features.Image(
+                                            "front_l": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
@@ -215,8 +192,10 @@ class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
 
             # patch
             ep["image"] = {
-                **{"wrist": ep["image"]["wrist"]},
-                **{ k:y for k,y in ep["image"].items() if "camera" in k },
+                "window": ep["image"]["camera_6"],
+                "front_r": ep["image"]["camera_8"],
+                "front_l": ep["image"]["camera_10"],
+                "wrist": ep["image"]["wrist"],
             }
 
             episode = []
