@@ -1,6 +1,6 @@
+import json
 from pathlib import Path
 from pprint import pprint
-import json
 from typing import Any, Iterator, Tuple
 
 import jax
@@ -10,15 +10,11 @@ import tensorflow_datasets as tfds
 import tensorflow_hub as hub
 
 
-
-
 class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for LUC XGym 'duck in basked' Single Arm v1.0.0"""
 
-    VERSION = tfds.core.Version("1.0.1")
-    RELEASE_NOTES = {
-        "1.0.0": "Initial release.",
-    }
+    VERSION = tfds.core.Version("2.0.0")
+    RELEASE_NOTES = {"1.0.0": "Initial release.", "2.0.0": "more data and overhead cam"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -52,6 +48,12 @@ class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
                                                 dtype=np.uint8,
                                                 encoding_format="png",
                                                 doc="Main camera RGB observation.",
+                                            ),
+                                            "overhead": tfds.features.Image(
+                                                shape=(224, 224, 3),
+                                                dtype=np.uint8,
+                                                encoding_format="png",
+                                                doc="Overhead camera RGB observation.",
                                             ),
                                             "wrist": tfds.features.Image(
                                                 shape=(224, 224, 3),
@@ -120,9 +122,9 @@ class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
 
-        files = [x for x in Path("~/xgym_duck").expanduser().rglob("*.npz")]
+        files = [x for x in Path("~/xgym_duck2").expanduser().rglob("*.npz")]
 
-        return { "train": self._generate_examples(files) }
+        return {"train": self._generate_examples(files)}
 
     def is_noop(self, action, prev_action=None, threshold=1e-3):
         """
@@ -168,8 +170,8 @@ class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
     def _generate_examples(self, ds) -> Iterator[Tuple[str, Any]]:
         """Generator of examples for each split."""
 
-        taskfile = next(Path().cwd().glob('*.npy'))
-        task = taskfile.stem.replace('_', ' ')
+        taskfile = next(Path().cwd().glob("*.npy"))
+        task = taskfile.stem.replace("_", " ")
         lang = np.load(taskfile)
 
         def _parse_example(path):
@@ -190,13 +192,23 @@ class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
                 ep.pop("img"),
             )
 
-            # patch
-            ep["image"] = {
-                "window": ep["image"]["camera_6"],
-                "front_r": ep["image"]["camera_8"],
-                "front_l": ep["image"]["camera_10"],
-                "wrist": ep["image"]["wrist"],
-            }
+            try:  # v1
+                ep["image"] = {
+                    "window": ep["image"]["camera_6"],
+                    "front_r": ep["image"]["camera_8"],
+                    "front_l": ep["image"]["camera_10"],
+                    "overhead": np.zeros_like(ep["image"]["wrist"]),
+                    "wrist": ep["image"]["wrist"],
+                }
+            except KeyError as e:  # v2
+                print(f"missing key: {e}")
+                ep["image"] = {
+                    "wrist": ep["image"]["wrist"],
+                    "front_l": ep["image"]["camera_2"],
+                    "front_r": ep["image"]["camera_10"],
+                    "window": ep["image"]["camera_0"],
+                    "overhead": ep["image"]["camera_12"],
+                }
 
             episode = []
             n = len(ep["proprio"]["position"])
@@ -215,7 +227,6 @@ class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
 
                 act = next["proprio"]["position"] - step["proprio"]["position"]
                 act[:3] = act[:3] / int(1e3)
-                #act[3:6] = 0
                 act[-1] = step["proprio"]["position"][-1] / 850
 
                 # if norm is less than eps
@@ -240,7 +251,7 @@ class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
 
             # if you want to skip an example for whatever reason, simply return None
             sample = {"steps": episode, "episode_metadata": {}}
-            id = f'{path.parent.name}_{path.stem}'
+            id = f"{path.parent.name}_{path.stem}"
             return id, sample
 
         for path in ds:
