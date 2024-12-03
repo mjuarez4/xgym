@@ -168,7 +168,7 @@ class Base(gym.Env):
         self.robot.set_state(0)
         self.robot.set_gripper_enable(True)
         self.robot.set_gripper_mode(0)
-        self.robot.set_gripper_speed(1000)
+        self.robot.set_gripper_speed(3000)
         self.robot.set_gripper_position(800, wait=False)
         logger.info("Robot initialized.")
 
@@ -515,11 +515,12 @@ class Base(gym.Env):
 
     @timer
     def look(self):
+        size = (self.imsize, self.imsize)
         image, depth = self.rs.read()
+        image = cv2.resize(image, size)
         imgs = {f"camera_{k}": cam.read() for k, cam in self.cams.items()}
         imgs["wrist"] = image
 
-        size = (self.imsize, self.imsize)
         imgs = {k: cv2.resize(cu.square(v), size) for k, v in imgs.items()}
 
         # image = np.concatenate([image, img], axis=1)
