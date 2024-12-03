@@ -85,5 +85,20 @@ def main():
 # frames = np.array(frames)
 
 
+def realsense():
+    from gello.cameras.realsense_camera import RealSenseCamera, get_device_ids
+    device_ids = get_device_ids()
+    rs = RealSenseCamera(flip=False, device_id=device_ids[0])
+
+    while True:
+        image, depth = rs.read()
+        image = cv2.resize(image, (480, 480))
+        print(image.shape)
+        cv2.imshow("image", cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        cv2.imshow("depth", depth)
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
+
 if __name__ == "__main__":
+    # realsense()
     main()
