@@ -1,4 +1,5 @@
 import os
+import draccus
 import os.path as osp
 import time
 from dataclasses import dataclass, field
@@ -36,9 +37,9 @@ class RunCFG:
     time: str = time.strftime("%Y%m%d-%H%M%S")
     env_name: str = f"xgym-sandbox-{task}-v0-{time}"
     data_dir: str = osp.join(base_dir, env_name)
+    nsteps: int = 300
 
 
-cfg = RunCFG()
 
 plt.switch_backend("Agg")
 
@@ -68,7 +69,8 @@ def plot(actions):
     return img
 
 
-def main():
+@draccus.wrap()
+def main(cfg: RunCFG):
 
     os.makedirs(cfg.data_dir, exist_ok=True)
 
@@ -93,7 +95,7 @@ def main():
 
         # timestep = env.reset()
         # obs = timestep.observation
-        for _ in tqdm(range(int(300)), desc=f"EP{ep}"):  # 3 episodes
+        for _ in tqdm(range(int(cfg.nsteps)), desc=f"EP{ep}"):  # 3 episodes
 
             tic = time.time()
             print("\n" * 3)
