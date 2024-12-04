@@ -13,8 +13,12 @@ import tensorflow_hub as hub
 class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for LUC XGym 'duck in basked' Single Arm v1.0.0"""
 
-    VERSION = tfds.core.Version("2.0.0")
-    RELEASE_NOTES = {"1.0.0": "Initial release.", "2.0.0": "more data and overhead cam"}
+    VERSION = tfds.core.Version("3.0.0")
+    RELEASE_NOTES = {
+        "1.0.0": "Initial release.",
+        "2.0.0": "more data and overhead cam",
+        "3.0.0": "relocated setup",
+    }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -31,35 +35,29 @@ class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
                                 {
                                     "image": tfds.features.FeaturesDict(
                                         {
-                                            "window": tfds.features.Image(
+                                            "worm": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
-                                                doc="Main camera RGB observation.",
+                                                doc="Low front logitech camera RGB observation.",
                                             ),
-                                            "front_r": tfds.features.Image(
+                                            "side": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
-                                                doc="Main camera RGB observation.",
-                                            ),
-                                            "front_l": tfds.features.Image(
-                                                shape=(224, 224, 3),
-                                                dtype=np.uint8,
-                                                encoding_format="png",
-                                                doc="Main camera RGB observation.",
+                                                doc="Low side view logitech camera RGB observation.",
                                             ),
                                             "overhead": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
-                                                doc="Overhead camera RGB observation.",
+                                                doc="Overhead logitech camera RGB observation.",
                                             ),
                                             "wrist": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
-                                                doc="Wrist camera RGB observation.",
+                                                doc="Wrist realsense camera RGB observation.",
                                             ),
                                         }
                                     ),
@@ -122,7 +120,7 @@ class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
 
-        files = [x for x in Path("~/xgym_duck2").expanduser().rglob("*.npz")]
+        files = [x for x in Path("~/xgym_duck3").expanduser().rglob("*.npz")]
 
         return {"train": self._generate_examples(files)}
 
@@ -192,24 +190,6 @@ class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
                 ep.pop("img"),
             )
 
-            try:  # v1
-                ep["image"] = {
-                    "window": ep["image"]["camera_6"],
-                    "front_r": ep["image"]["camera_8"],
-                    "front_l": ep["image"]["camera_10"],
-                    "overhead": np.zeros_like(ep["image"]["wrist"]),
-                    "wrist": ep["image"]["wrist"],
-                }
-            except KeyError as e:  # v2
-                print(f"missing key: {e}")
-                ep["image"] = {
-                    "wrist": ep["image"]["wrist"],
-                    "front_l": ep["image"]["camera_2"],
-                    "front_r": ep["image"]["camera_10"],
-                    "window": ep["image"]["camera_0"],
-                    "overhead": ep["image"]["camera_12"],
-                }
-
             episode = []
             n = len(ep["proprio"]["position"])
 
@@ -254,7 +234,7 @@ class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
             id = f"{path.parent.name}_{path.stem}"
             return id, sample
 
-        for path in ds:
+        for path in ds[1:]:
             yield _parse_example(path)
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)

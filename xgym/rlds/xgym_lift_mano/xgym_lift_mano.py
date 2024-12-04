@@ -151,8 +151,7 @@ class XgymLiftMano(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
 
-        root = Path("~/xgym_mano").expanduser().glob("*_tfds")  # episodes are npz
-        root = Path("~/.bala/output_hamer").expanduser().glob("*_tfds*")  # episodes are npz
+        root = Path("~/xgym_mano").expanduser().glob("*.npz")  # episodes are npz
 
         return { "train": self._generate_examples(root) }
 
