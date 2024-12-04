@@ -29,7 +29,10 @@ print(df)
 
 def main():
 
+    store = False
     cams = cu.list_cameras()
+
+    print(cams)
 
     for k, cam in cams.items():
         print(f"Camera {k}: {cam.get(cv2.CAP_PROP_FPS)} FPS")
@@ -57,7 +60,9 @@ def main():
         imgs = cu.resize_all(list(imgs.values()))
         frame = np.concatenate(imgs, axis=1)
 
-        frames.append(frame)
+        if store:
+            frames.append(frame)
+
         cv2.putText(
             frame,
             f"FPS: 5 | time: {tic}",
@@ -77,7 +82,8 @@ def main():
         elapsed = toc - tic
         time.sleep(max(0, dt - elapsed))
 
-    cu.save_frames(frames, "test", ext="mp4", fps=30)
+    if store:
+        cu.save_frames(frames, "test", ext="mp4", fps=30)
 
     quit()
 
