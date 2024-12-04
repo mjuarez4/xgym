@@ -46,7 +46,7 @@ def extract_npz_files(i, img, detector, vitpose, device, model, model_cfg, rende
 
 
 def stack_sequence(sequence):
-    """ Stacks all frames in the sequence into arrays for saving. """
+    """Stacks all frames in the sequence into arrays for saving."""
     stacked = {}
     for key in sequence[0].keys():
         stacked[key] = np.stack([step[key] for step in sequence], axis=0)
@@ -54,7 +54,7 @@ def stack_sequence(sequence):
 
 
 def process_sequence(sequence):
-    """ Filters frames to ensure only right-hand detections are included. """
+    """Filters frames to ensure only right-hand detections are included."""
     is_right = int(np.array([step["right"].mean() for step in sequence]).mean() > 0.5)
 
     if not is_right:
@@ -75,14 +75,8 @@ def process_sequence(sequence):
     return processed_sequence
 
 
-def pipeline(frame, out):
-
-    # center crop to 224
-    pass
-
-
 def get_total_frames(vpath):
-    """ Get the total number of frames in the video using OpenCV. """
+    """Get the total number of frames in the video using OpenCV."""
     cap = cv2.VideoCapture(str(vpath))  # Ensure video path is converted to string
     if not cap.isOpened():
         print(f"Error: Cannot open the video file: {vpath}")
@@ -93,6 +87,11 @@ def get_total_frames(vpath):
 
 
 def main():
+
+    # Process all videos in MANO_1
+    video_files = list(MANO_1.glob("*.mp4"))
+    print(video_files)
+    quit()
 
     # Download and load models
     download_models(CACHE_DIR_HAMER)
@@ -106,8 +105,6 @@ def main():
     vitpose = ViTPoseModel(device)
     renderer = Renderer(model_cfg, faces=model.mano.faces)
 
-    # Process all videos in MANO_1
-    video_files = list(MANO_1.glob("*.mp4"))
     for vpath in video_files:
         print(f"Processing video: {vpath.name}")
         sequence = []
