@@ -9,37 +9,13 @@ import tensorflow_hub as hub
 from tqdm import tqdm
 
 
-def downscale_to_224(height: int, width: int) -> Tuple[int, int]:
-    """
-    Downscale the image so that the shorter dimension is 224 pixels,
-    and the longer dimension is scaled by the same ratio.
-
-    Args:
-        height (int): The height of the image.
-        width (int): The width of the image.
-
-    Returns:
-        Tuple[int, int]: The new height and width of the image.
-    """
-    # Determine the scaling ratio
-    if height < width:
-        ratio = 224.0 / height
-        new_height = 224
-        new_width = int(width * ratio)
-    else:
-        ratio = 224.0 / width
-        new_width = 224
-        new_height = int(height * ratio)
-
-    return new_height, new_width
-
-
 class XgymLiftMano(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for LUC XGym Mano v1.0.0"""
+    """DatasetBuilder for LUC XGym Mano"""
 
-    VERSION = tfds.core.Version("1.0.0")
+    VERSION = tfds.core.Version("3.0.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
+        "3.0.0": "New location.",
     }
 
     def __init__(self, *args, **kwargs):
@@ -55,21 +31,19 @@ class XgymLiftMano(tfds.core.GeneratorBasedBuilder):
                         {
                             "observation": tfds.features.FeaturesDict(
                                 {
-                                    "frame": tfds.features.Image(
+                                    "img": tfds.features.Image(
                                         shape=(224, 224, 3),
                                         dtype=np.uint8,
                                         encoding_format="png",
                                         doc="Main camera RGB observation.",
                                     ),
-                                    # "frame_human0": tfds.features.Image(
-                                    # shape=(224, 512, 3),
-                                    # dtype=np.uint8,
-                                    # encoding_format="png",
-                                    # doc="RGB observation that follows the hand.",
-                                    # ),
-                                    "focal_length": tfds.features.Tensor(
-                                        shape=(), dtype=np.float32
+                                    "img_wrist": tfds.features.Image(
+                                        shape=(224, 224, 3),
+                                        dtype=np.uint8,
+                                        encoding_format="png",
+                                        doc="RGB observation that follows the hand.",
                                     ),
+                                    # "focal_length": tfds.features.Tensor( shape=(), dtype=np.float32),
                                     "scaled_focal_length": tfds.features.Tensor(
                                         shape=(), dtype=np.float32
                                     ),
@@ -83,24 +57,20 @@ class XgymLiftMano(tfds.core.GeneratorBasedBuilder):
                                         dtype=np.float32,
                                         doc="3D keypoints in camera space.",
                                     ),
-                                    "mano": tfds.features.FeaturesDict(
-                                        {
-                                            "betas": tfds.features.Tensor(
-                                                shape=(10,),
-                                                dtype=np.float32,
-                                                doc="Hand shape parameters.",
-                                            ),
-                                            "global_orient": tfds.features.Tensor(
-                                                shape=(1,3,3,),
-                                                dtype=np.float32,
-                                                doc="Global orientation of the hand.",
-                                            ),
-                                            "hand_pose": tfds.features.Tensor(
-                                                shape=(15,3,3,),
-                                                dtype=np.float32,
-                                                doc="Hand pose parameters.",
-                                            ),
-                                        }
+                                    "mano.betas": tfds.features.Tensor(
+                                        shape=(10,),
+                                        dtype=np.float32,
+                                        doc="Hand shape parameters.",
+                                    ),
+                                    "mano.global_orient": tfds.features.Tensor(
+                                        shape=(1, 3, 3),
+                                        dtype=np.float32,
+                                        doc="Global orientation of the hand.",
+                                    ),
+                                    "mano.hand_pose": tfds.features.Tensor(
+                                        shape=(15, 3, 3),
+                                        dtype=np.float32,
+                                        doc="Hand pose parameters.",
                                     ),
                                     "right": tfds.features.Tensor(
                                         shape=(),
@@ -151,9 +121,10 @@ class XgymLiftMano(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
 
-        root = Path("~/xgym_mano").expanduser().glob("*.npz")  # episodes are npz
+        from xgym import MANO_2, MANO_3, MANO_4
 
-        return { "train": self._generate_examples(root) }
+        root = Path(MANO_4).expanduser().glob("*.npz")  # episodes are npz
+        return {"train": self._generate_examples(root)}
 
     def is_noop(self, action, prev_action=None, threshold=1e-3):
         """
@@ -200,64 +171,39 @@ class XgymLiftMano(tfds.core.GeneratorBasedBuilder):
     def _generate_examples(self, ds) -> Iterator[Tuple[str, Any]]:
         """Generator of examples for each split."""
 
-        # self._embed = hub.load( "https://tfhub.dev/google/universal-sentence-encoder-large/5")
-        task = "embodiment:Human, task:pick up the red block"  # hardcoded for now
-        # lang = self._embed([task])[0].numpy()  # embedding takes ≈0.06s
-        lang = np.zeros(512, dtype=np.float32)
-
-        self.obskeys = [
-            "focal_length",
-            "scaled_focal_length",
-            #
-            "frame",
-            "keypoints_2d",
-            "keypoints_3d",
-            "mano",
-            # "mano.betas",
-            # "mano.global_orient",
-            # "mano.hand_pose",
-            "right",
-        ]
+        # task = "embodiment:Human, task:pick up the red block"  # hardcoded for now
+        taskfile = next(Path().cwd().glob("*.npy"))
+        task = taskfile.stem.replace("_", " ")
+        lang = np.load(taskfile)
 
         def _parse_example(idx, ep):
-
-            # sort series of npz files (steps in episode) by index
-            # ep = ep.glob("*.npz")
-            # ep = list(
-                # sorted(ep, key=lambda x: int(x.name.split(".")[0].split("_")[-1]))
-            # )
 
             spec = lambda arr: jax.tree.map(lambda x: x.shape, arr)
 
             ep = np.load(ep)
-            ep = self.dict_unflatten({k: ep[k] for k in ep.files})
-            ep['mano'] = ep.pop('mano_params')
+            ep = {k: ep[k] for k in ep.files}
+            # ep = self.dict_unflatten({k: ep[k] for k in ep.files})
 
             pprint(spec(ep))
-            ep = {k:v for k,v in ep.items() if k in self.obskeys}
+            # quit()
 
-            frame = ep.pop("frame")
-            ep = jax.tree.map(lambda x: x.astype(np.float32), ep)
-            ep["frame"] = frame
-
-            ep['keypoints_2d'] = ep['keypoints_2d'][:, :, :-1]  # remove visibility
-            pprint(spec(ep))
-
+            ep = {
+                k: v.astype(np.float32) if "img" not in k else v for k, v in ep.items()
+            }
 
             next = None
             episode = []  # last step is used for noop
-            for i, step in tqdm(enumerate(ep['frame'][:-1]), total=len(ep)):
+            for i, step in tqdm(enumerate(ep["img"][:-1]), total=len(ep)):
 
                 # prev = jax.tree.map(lambda x: x[i - 1], ep) if i > 0 else None
-                step = jax.tree.map(lambda x: x[i] , ep) if next is None else next
-                next = jax.tree.map(lambda x: x[i + 1], ep) 
+                step = jax.tree.map(lambda x: x[i], ep) if next is None else next
+                next = jax.tree.map(lambda x: x[i + 1], ep)
 
                 # act is only for finding noop
                 act = next["keypoints_2d"] - step["keypoints_2d"]
 
-                # not moving more than 1px
+                # not moving more than <threshold>px
                 if self.is_noop(act, None, threshold=3):
-                    # print("noop")
                     continue
 
                 episode.append(

@@ -94,7 +94,7 @@ class DemoCN:
     out_folder: str = "out_demo"  # Output folder to save rendered results
     side_view: bool = False  # If set, render side view also
     full_frame: bool = True  # If set, render all people together also
-    save_mesh: bool = True  # If set, save meshes to disk also
+    save_mesh: bool = False  # If set, save meshes to disk also
     batch_size: int = 1  # Batch size for inference/fitting
     rescale_factor: float = 2.0  # Factor for padding the bbox
     body_detector: str = "vitdet"  # Using regnety improves runtime and reduces memory
@@ -231,7 +231,7 @@ def infer(i, img, detector, vitpose, device, model, model_cfg, renderer: Rendere
             2,
         )
     # save image
-    cv2.imwrite(f"pose_{i}.jpg", cv2.cvtColor(viz, cv2.COLOR_RGB2BGR))
+    # cv2.imwrite(f"pose_{i}.jpg", cv2.cvtColor(viz, cv2.COLOR_RGB2BGR))
 
     logger.info("### 4. get MANO parameters from HaMeR")
 
@@ -247,7 +247,7 @@ def infer(i, img, detector, vitpose, device, model, model_cfg, renderer: Rendere
     )
 
     print(OUT.keys)
-    return OUT, front
+    return OUT # , front
 
 
 def load_and_preprocess_image(img_path):
@@ -704,12 +704,6 @@ def main():
     for i, img in enumerate(reader):
 
         try:
-            box = torch.Tensor(
-                [img.shape[1] / 2.0, 0, img.shape[1] / 2.0, img.shape[0] / 2.0]
-            )
-            x, y, w, h = box.tolist()
-            H, W = img.shape[:2]
-
             out, front = infer(
                 i, img, detector, vitpose, device, model, model_cfg, renderer
             )

@@ -62,11 +62,11 @@ def overlay_palm(img, x, y, opacity, size=None):
 @draccus.wrap()
 def main(cfg: BaseReaderConfig):
     pprint(cfg)
-    quit()
 
     name = f"xgym_{cfg.task}_{cfg.embodiment}"
     print(f"Loading {name} dataset")
     ds = tfds.load(name)["train"]
+    # ds = ds.repeat(100)
 
     for ep in ds:
         steps = [x for x in ep["steps"]]
@@ -81,7 +81,7 @@ def main(cfg: BaseReaderConfig):
                 print(action)
                 img = np.concatenate(list(s["observation"]["image"].values()), axis=1)
             else:
-                img = np.array(s["observation"]["frame"])
+                img = np.array(s["observation"]["img"])
                 for j in range(4):
                     try:
                         points2d = add_col(
@@ -92,8 +92,13 @@ def main(cfg: BaseReaderConfig):
                         print(palm)
                         # z = np.array(steps[i + j]["observation"]["keypoints_3d"])[0][2]
                         # img = overlay_palm(img, int(palm[0]), int(palm[1]), j, z)
-                    except Exception as e:
-                        print(e)
+
+                    except IndexError as e:
+                        pass
+                        # print(e)
+
+                wrist = np.array(s["observation"]["img_wrist"])
+                cv2.imshow("wrist", cv2.cvtColor(wrist, cv2.COLOR_RGB2BGR))
 
             cv2.imshow("image", cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
             cv2.waitKey(50)

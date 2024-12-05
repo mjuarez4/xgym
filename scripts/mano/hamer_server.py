@@ -4,17 +4,20 @@ json_numpy.patch()
 import time
 import traceback
 from collections import deque
-from typing import Any, Dict
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
 
+import cv2
 import numpy as np
 import tensorflow as tf
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from jax import numpy as jnp
 
 
 def json_response(obj):
-    return JSONResponse(json_numpy.dumps(obj))
+    return JSONResponse(jax.tree.map(json_numpy.dumps, obj))
 
 
 def resize(img, size=(224, 224)):
@@ -54,7 +57,7 @@ class DemoCN:
     out_folder: str = "out_demo"  # Output folder to save rendered results
     side_view: bool = False  # If set, render side view also
     full_frame: bool = True  # If set, render all people together also
-    save_mesh: bool = True  # If set, save meshes to disk also
+    save_mesh: bool = False  # If set, save meshes to disk also
     batch_size: int = 1  # Batch size for inference/fitting
     rescale_factor: float = 2.0  # Factor for padding the bbox
     body_detector: str = "vitdet"  # Using regnety improves runtime and reduces memory
@@ -68,14 +71,36 @@ def get_config() -> DemoCN:
 args = get_config()
 
 
+import jax
+import torch
 from hamer.utils import SkeletonRenderer, recursive_to
 from hamer.utils.renderer import Renderer, cam_crop_to_full
+from util import infer, init_detector, resize, stack_and_pad
 from vitpose_model import ViTPoseModel
 
-from .util import infer, init_detector, resize, stack_and_pad
+
+def flatten(d, parent_key="", sep="."):
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
 
-import jax
+HAMER_STAT = {
+    "mean": [0.485, 0.456, 0.406],
+    "std": [0.229, 0.224, 0.225],
+}
+
+
+def unnormalize(img):
+    """bring image back to 0-255 range"""
+    img = img * np.array(HAMER_STAT["std"]) + np.array(HAMER_STAT["mean"])
+    return (np.clip(img, 0, 1) * 255).astype(np.uint8)
+
 
 class HttpServer:
 
@@ -103,7 +128,7 @@ class HttpServer:
 
         # torch models dont compile... so we are done
 
-    def run(self, port=8000, host="0.0.0.0"):
+    def run(self, port=8001, host="0.0.0.0"):
         self.app = FastAPI()
         self.app.post("/query")(self.forward)
         self.app.post("/reset")(self.reset)
@@ -115,25 +140,26 @@ class HttpServer:
     def forward(self, payload: Dict[Any, Any]):
         try:
 
-            obs = payload["observation"]
-            for key in obs:
-                if "image" in key:
-                    obs[key] = resize(obs[key])
+            obs = np.array(payload["observation"])
+            # for key in obs:
+            # if "image" in key:
+            # obs[key] = resize(obs[key])
 
             out = infer(
-                obs,
-                self.model,
-                self.model_cfg,
-                self.detector,
-                self.vitpose,
-                self.renderer,
-                self.skrenderer,
+                i=0,
+                img=obs,
+                detector=self.detector,
+                vitpose=self.vitpose,
+                device=self.device,
+                model=self.model,
+                model_cfg=self.model_cfg,
+                renderer=self.renderer,
             )
 
-            out = jax.tree.map(
-                lambda x: x[0], out.data, is_leaf=is_leaf
-            )  # everything is wrapped in list
-
+            # everything is wrapped in list
+            spec = lambda arr: jax.tree.map(lambda x: (type(x), x.shape), arr)
+            is_leaf = lambda x: isinstance(x, (list, tuple))
+            out = jax.tree.map(lambda x: x[0], out.data, is_leaf=is_leaf)
             out = flatten(out)
 
             clean = lambda x: (
@@ -143,7 +169,10 @@ class HttpServer:
 
             pprint(spec(out))
 
-
+            prepare = lambda x: cv2.resize(x.transpose(1, 2, 0), (224, 224))
+            out["img_wrist"] = np.stack(prepare(x) for x in out.pop("img"))
+            out["img_wrist"] = unnormalize(out["img_wrist"])
+            out["img"] = obs
 
             return json_response(out)
 
@@ -159,7 +188,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", help="Host to run on", default="0.0.0.0", type=str)
-    parser.add_argument("--port", help="Port to run on", default=8000, type=int)
+    parser.add_argument("--port", help="Port to run on", default=8001, type=int)
     args = parser.parse_args()
 
     server = HttpServer()

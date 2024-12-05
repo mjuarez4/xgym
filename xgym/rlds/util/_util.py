@@ -30,8 +30,13 @@ def apply_uv(image, mat, **rules):
 
 
 def apply_xyz(points, mat):
+    """
+    Applies a 4x4 matrix to 3D points
+    points are expected to be batched BNx3
+    """
+    b = points.shape[0]
     points_hom = add_col(points)  # 4d
-    points_hom = np.einsum("bij,bkj->bki", np.stack([mat] * 2), points_hom)
+    points_hom = np.einsum("bij,bkj->bki", np.stack([mat] * b), points_hom)
     points = remove_col(points_hom)  # 3d
     return points
 
