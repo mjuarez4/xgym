@@ -184,8 +184,8 @@ class Base(gym.Env):
         self.boundary = bd.AND(
             [
                 bd.CartesianBoundary(
-                    min=RS(cartesian=[350, -350, 1]),
-                    max=RS(cartesian=[500, -75, 300]),
+                    min=RS(cartesian=[150, -350, 55]), # 5mm safety margin
+                    max=RS(cartesian=[800, -350, 300]),
                 ),
                 # bd.AngularBoundary(
                 # min=RS(
@@ -226,15 +226,7 @@ class Base(gym.Env):
 
         # anything else?
         self.ready = RS(
-            joints=[
-                -0.223213,
-                -0.228721,
-                0.021959,
-                1.018191,
-                0,
-                1.246863,
-                1.367298,
-            ]
+            joints=[0.078, -0.815, -0.056, 0.570, -0.042, 1.385, 0.047]
             # rpy=[np.pi, 0, -np.pi/2]
         )
 
@@ -259,6 +251,14 @@ class Base(gym.Env):
         # logitech cameras
         cams = cu.list_cameras()
         self.cams = {k: MyCamera(cam) for k, cam in cams.items()}
+
+        # must be manually verified if changed
+        self.cams = {
+            "worm": self.cams[0],
+            'overhead': self.cams[2],
+            'side': self.cams[10],
+            }
+
         print(self.cams)
 
         # cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.imsize)
@@ -356,16 +356,17 @@ class Base(gym.Env):
 
         self._go_joints(self.ready, relative=False)
         self.robot.set_position(
-            x=400,
-            y=-180,
+            x=250,
+            y=0,
             z=250,
             roll=np.pi,
             pitch=0,
-            yaw=-np.pi / 2,
+            yaw=0,  # -np.pi / 2,
             relative=False,
             wait=True,
         )
         self.ready = self.position
+        logger.info(f"Ready position: {self.ready}")
 
         time.sleep(0.1)
 
@@ -518,7 +519,7 @@ class Base(gym.Env):
         size = (self.imsize, self.imsize)
         image, depth = self.rs.read()
         image = cv2.resize(image, size)
-        imgs = {f"camera_{k}": cam.read() for k, cam in self.cams.items()}
+        imgs = {f"{k}": cam.read() for k, cam in self.cams.items()}
         imgs["wrist"] = image
 
         imgs = {k: cv2.resize(cu.square(v), size) for k, v in imgs.items()}
@@ -544,7 +545,7 @@ class Base(gym.Env):
     def safety_torque_limit(self):
         t = np.abs(self.torque)
         if np.any(t > self.limit_torque):
-            logger.error(f'torque limit reached: {t}')
+            logger.error(f"torque limit reached: {t}")
             self.set_mode(2)
             time.sleep(0.01)
             self.set_mode(2)

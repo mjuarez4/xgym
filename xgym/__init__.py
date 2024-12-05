@@ -7,6 +7,13 @@ BASE = Path(__file__).parent.parent
 HOME = Path.home()
 DATA = HOME / "data_xgym"
 
+# the naming convention is as follows:
+# 0_input: raw DATA
+# 1_clip: already been clipped DATA
+# 2_hamer: already been hamer(ed) DATA
+# 3_center: already been centered DATA
+# 4_clean: already been cleaned DATA
+
 MANO = DATA / "mano"
 MANO_0 = MANO / "0_input"
 MANO_1 = MANO / "1_clip"

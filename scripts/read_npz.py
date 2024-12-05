@@ -16,6 +16,7 @@ from tqdm import tqdm
 import draccus
 import tensorflow_datasets as tfds
 
+from xgym.utils import camera as cu
 
 @dataclass
 class RunCFG:
@@ -52,7 +53,7 @@ for e in tqdm(ds):
     if e["robot.joints"].shape[0] < e["robot.joints"].shape[1]:
         e["robot.joints"] = e["robot.joints"].T
 
-    print(n)
+    # print(n)
     last_grip = None
     idxs = []
     for i in range(n - 1):
@@ -68,37 +69,27 @@ for e in tqdm(ds):
         if np.linalg.norm(act[:-1]) < eps:
             if last_grip is None or last_grip == round(act[-1], 1):
                 # print(act.tolist())
-                print("skip")
+                # print("skip")
                 n -= 1
                 continue
 
         last_grip = round(act[-1], 1)
-        print([round(x, 4) for x in act.tolist()])
+        # print([round(x, 4) for x in act.tolist()])
 
         idxs.append(i)
 
         imgs = {x: e[x][i] for x in e if x.startswith("img")}
-        imgs = {
-            x: cv2.putText(
-                imgs[x],
-                f"{x}",
-                (0, 25),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (255, 255, 0),
-                2,
-            )
-            for x in imgs
-        }
+        imgs = cu.writekeys(imgs)
         imgs = np.concatenate(list(imgs.values()), axis=1)
         cv2.imshow("img", cv2.cvtColor(imgs, cv2.COLOR_RGB2BGR))
-        # cv2.waitKey(0)
-        cv2.waitKey(10)
+        # cv2.waitKey(0) # key every frame/step
+        cv2.waitKey(5)
         # cv2.waitKey(50)
 
     # last one just for show ... no action
     i = -1
     imgs = {x: e[x][i] for x in e if x.startswith("img")}
+    imgs = cu.writekeys(imgs)
     imgs = np.concatenate(list(imgs.values()), axis=1)
     cv2.imshow("img", cv2.cvtColor(imgs, cv2.COLOR_RGB2BGR))
     # cv2.waitKey(0)
@@ -109,7 +100,7 @@ for e in tqdm(ds):
     else:
         np.savez(path, **jax.tree.map(lambda x: x[np.array(idxs)], e))
 
-    print(n)
+    # print(n)
 
     """
         action = e["action"][i]

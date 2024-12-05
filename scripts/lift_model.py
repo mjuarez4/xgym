@@ -5,16 +5,16 @@ from dataclasses import dataclass, field
 
 import cv2
 import draccus
-import envlogger
+# import envlogger
 import gymnasium as gym
 import jax
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
 from bsuite.utils.gym_wrapper import DMEnvFromGym, GymFromDMEnv
-from envlogger.backends.tfds_backend_writer import \
-    TFDSBackendWriter as TFDSWriter
-from envlogger.testing import catch_env
+# from envlogger.backends.tfds_backend_writer import \
+# TFDSBackendWriter as TFDSWriter
+# from envlogger.testing import catch_env
 from pynput import keyboard
 from tqdm import tqdm
 
@@ -41,52 +41,23 @@ cfg = RunCFG()
 def main():
 
     os.makedirs(cfg.data_dir, exist_ok=True)
-    dataset_config = tfds.rlds.rlds_base.DatasetConfig(
-        name=cfg.env_name,
-        observation_info=tfds.features.FeaturesDict(
-            {
-                "robot": tfds.features.FeaturesDict(
-                    {
-                        "joints": tfds.features.Tensor(shape=(7,), dtype=np.float64),
-                        "position": tfds.features.Tensor(shape=(7,), dtype=np.float64),
-                    }
-                ),
-                "img": tfds.features.FeaturesDict(
-                    {
-                        "camera_0": tfds.features.Tensor(
-                            shape=(640, 640, 3), dtype=np.uint8
-                        ),
-                        "wrist": tfds.features.Tensor(
-                            shape=(640, 640, 3), dtype=np.uint8
-                        ),
-                    }
-                ),
-            }
-        ),
-        action_info=tfds.features.Tensor(shape=(7,), dtype=np.float64),
-        reward_info=tfds.features.Tensor(shape=(), dtype=np.float64),
-        discount_info=tfds.features.Tensor(shape=(), dtype=np.float64),
-    )
-
-    # env: Base = gym.make("luc-base")
 
     # @ethan TODO make this a configurable parameter? see scripts/reader_rlds and github.com/dlwh/draccus
-    #model = ModelController("carina.cs.luc.edu", 8001, ensemble=True)
-    #model = ModelController("aisec-102.cs.luc.edu", 8001, ensemble=True)
-    model = ModelController("dijkstra.cs.luc.edu", 8001, ensemble=True)
+    model = ModelController("carina.cs.luc.edu", 8001, ensemble=False, task='lift')
+    # model = ModelController("aisec-102.cs.luc.edu", 8001, ensemble=True)
+    # model = ModelController("dijkstra.cs.luc.edu", 8001, ensemble=True)
     model.reset()
 
     # env = gym.make("xgym/stack-v0")
     env = Lift(out_dir=cfg.data_dir, random=False)
+    env.logger.warning(model.tasks[model.task])
 
     # ds = tfds.load("xgym_lift_single", split="train")
 
     freq = 5  # hz
     dt = 1 / freq
 
-    T = np.zeros(7)
-
-    for ep in tqdm(range(10), desc="Episodes"):
+    for ep in tqdm(range(100), desc="Episodes"):
         obs = env.reset()
         env.set_mode(7)
         time.sleep(0.4)
@@ -94,22 +65,17 @@ def main():
 
         # timestep = env.reset()
         # obs = timestep.observation
-        for _ in tqdm(range(55), desc=f"EP{ep}"):  # 3 episodes
+        for _ in tqdm(range(75), desc=f"EP{ep}"):  # 3 episodes
 
             tic = time.time()
             print("\n" * 3)
 
+            # remap obs
+            print(obs["img"].keys())
+
             obs["img"] = jax.tree_map(
                 lambda x: cv2.resize(np.array(x), (224, 224)), obs["img"]
             )
-
-            print(obs["img"].keys())
-
-            # myimg = obs["img"]["camera_10"]
-            # primary = obs["img"]["camera_6"]
-
-            primary = obs["img"]["camera_10"]
-            myimg = None
 
             cv2.imshow(
                 "data Environment",
@@ -117,43 +83,41 @@ def main():
             )
             cv2.waitKey(1)  # 1 ms delay to allow for rendering
 
-            # action = model(obs["img"]["camera_0"], obs['img']['wrist']).copy()
+            proprio = obs["robot"]["position"]
+            proprio = np.array(proprio)
+            proprio[:3] = proprio[:3] / 1e3
+            proprio[-1] = proprio[-1] / env.GRIPPER_MAX
+
             actions = model(
-                primary=primary, high=myimg, wrist=obs["img"]["wrist"]
+                primary=obs["img"]["worm"],
+                high=obs["img"]["overhead"],
+                wrist=obs["img"]["wrist"],
+                side=obs["img"]["side"],
+                proprio=proprio.tolist(),
             ).copy()
-            # action = action[0] # take first of 4 steps in chunk
 
-            if not model.ensemble:
-                for a, action in enumerate(actions):
-                    tic = time.time() if a else tic
-                    action[:3] *= int(1e3)
-                    print(action.shape)
-                    # action[3:6] = 0
-                    action[-1] = 0.2 if action[-1] < 0.8 else 1  # less gripper
-                    # action = action / 2
-                    print(f"action: {[round(x,4) for x in action.tolist()]}")
-                    # _env.render(mode="human")
+            print(actions.round(3))
+            for a, action in enumerate(actions):
 
-                    obs, reward, done, info = env.step(action)
-                    toc = time.time()
-                    elapsed = toc - tic
-                    time.sleep(max(0, dt - elapsed))  # 5hz
-
-            else:
-                action = actions
                 action[:3] *= int(1e3)
-                action[-1] = 0.2 if action[-1] < 0.8 else 1  # less gripper
-                print(f"action: {[round(x,2) for x in action.tolist()]}")
+                print(action.shape)
+                action[-1] *= 0.8 if action[-1] < 0.5 else 1
+                # action[-1] *= 0 if action[-1] < 0.2 else 1
+                # action[-1] = 1 if action[-1] > 0.8 else action[-1]
+
+                print(f"action: {[round(x,4) for x in action.tolist()]}")
+
                 obs, reward, done, info = env.step(action)
-                toc = time.time()
-                elapsed = toc - tic
-                time.sleep(max(0, dt - elapsed))  # 5hz
+                time.sleep(dt)
 
-            t = np.abs(env.torque.round(4))
-            T = np.max([T, t], axis=0)
-            env.logger.error(T.round(4))
+                # toc = time.time()
+                # elapsed = toc - tic
+                # time.sleep(max(0, dt - elapsed))  # 5hz
+                # tic = time.time() if a else tic
 
-            print(f"done: {done}")
+                print(f"done: {done}")
+                if done:
+                    break
             if done:
                 break
 
@@ -165,8 +129,6 @@ def main():
         # env.auto_reset()
 
     env.close()
-    _env.close()
-
     quit()
 
 

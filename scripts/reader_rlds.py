@@ -24,7 +24,7 @@ class Embodiment(enum.Enum):
     MANO = "mano"
 
 @dataclass
-class Reader:
+class BaseReaderConfig:
 
     embodiment: Embodiment = Embodiment.SINGLE
     task: Task = Task.LIFT
@@ -60,7 +60,7 @@ def overlay_palm(img, x, y, opacity, size=None):
 
 
 @draccus.wrap()
-def main(cfg: Reader):
+def main(cfg: BaseReaderConfig):
     pprint(cfg)
     quit()
 

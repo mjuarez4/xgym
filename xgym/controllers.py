@@ -1,3 +1,5 @@
+import json_numpy as jp
+jp.patch()
 import os
 import threading
 import time
@@ -8,7 +10,6 @@ from pprint import pprint
 from typing import Any, Dict, Optional
 
 import jax
-import json_numpy
 # import keyboard
 import numpy as np
 import pynput
@@ -41,20 +42,24 @@ class SpaceMouseConfig:
 class VelocitySMC(SpaceMouseConfig):
 
     # xyz, rpy, gripper
+    # yxz, rpy, gripper
     # rpy is rotation along x, y, z
     scale = np.array(
         [
-            100.0,
-            100.0,
-            100.0,
+            125.0,
+            125.0,
+            125.0,
             0.5,
             0.5,
             0.5,
-            100,
+            200,
         ]
     )
-    flip = [1, 1, 1, -1, 1, -1, 1]
-    order = [0, 1, 2, 3, 5, 4, 6]
+
+    order = [1, 0, 2, 5, 3, 4, 6]
+    # applied after order
+    flip = [-1, 1, 1, -1, -1, -1, 1]
+    sensitivity = 1.5  # from 1 -> inf
 
 
 def ema_2d(data, window):
@@ -70,7 +75,7 @@ def ema_2d(data, window):
     return ema
 
 
-class SpaceMouseController:
+class SpaceMouseController:  # from 1 -> inf
 
     def __init__(self, cfg: SpaceMouseConfig = VelocitySMC()):
 
@@ -155,7 +160,7 @@ class SpaceMouseController:
                 ]
             )
             out = out[self.cfg.order]
-            # out = out**2 * np.sign(out) # make it less sensitive
+            # out = out ** self.cfg.sensitivity * np.sign(out) # make it less sensitive
             out = out * self.cfg.scale * self.cfg.flip
 
             self.hist = np.roll(self.hist, -1, axis=0)  # smooth
@@ -301,27 +306,53 @@ class ScriptedController(Controller):
 
 
 class ModelController(Controller):
-    def __init__(self, ip, port, ensemble=True):
+    def __init__(self, ip, port, ensemble=True, task="lift"):
         self.server = ip
         self.port = port
         self.url_query = f"http://{self.server}:{self.port}/query"
         self.url_reset = f"http://{self.server}:{self.port}/reset"
         self.ensemble = ensemble
 
-    def __call__(self, primary, high=None, wrist=None):
+        self.tasks = {
+            "duck": {
+                "text": "put the ducks in the bowl",
+                "dataset_name": "xgym_duck_single",
+            },
+            "stack": {
+                "text": "stack all the blocks vertically ",
+                "dataset_name": "xgym_stack_single",
+            },
+            "lift": {
+                "text": "pick up the red block",
+                "dataset_name": "xgym_lift_single",
+            },
+            "play": {"text": "pick up any object", "dataset_name": "xgym_play_single"},
+        }
+        self.task = task
+
+    def __call__(self, primary, high=None, side=None, wrist=None, proprio=None):
 
         image = {
             f"image_{k}": v.tolist()
-            for k, v in {"primary": primary, "left_wrist": wrist, "high": high}.items()
+            for k, v in {
+                "primary": primary,
+                "left_wrist": wrist,
+                "high": high,
+                "side": side,
+            }.items()
             if v is not None
         }
 
+        dataset_name = self.tasks[self.task]["dataset_name"]
         payload = {
-            "observation": {**image},
+            "observation": {
+                **image,
+                **({"proprio_single": proprio} if proprio is not None else {}),
+            },
             "modality": "l",  # can we use both? there is another letter for both
             "ensemble": self.ensemble,
             "model": "bafl",
-            "dataset_name": "xgym_single",  # Ensure this matches the server's dataset_name
+            "dataset_name": dataset_name,  # Ensure this matches the server's dataset_name
         }
 
         spec = lambda x: jax.tree.map(lambda arr: type(arr), x)
@@ -337,7 +368,7 @@ class ModelController(Controller):
         """
 
         # Set timeout to avoid hanging
-        response = requests.post(self.url_query, json=payload, timeout=10)
+        response = requests.post(self.url_query, json=payload, timeout=15)
         response.raise_for_status()
         response_text = response.text
         action = json_numpy.loads(response_text)  # 2x json-ified
@@ -345,16 +376,62 @@ class ModelController(Controller):
         return action
 
     def reset(self):
+        dataset_name = self.tasks[self.task]["dataset_name"]
         payload = {
             # "observation": {"image_primary": image.tolist()},
-            "text": "put the yellow block on the green block",
+            "text": self.tasks[self.task]["text"],
             "modality": "l",  # can we use both? there is another letter for both
             "ensemble": self.ensemble,
             "model": "bafl",
-            "dataset_name": "xgym_single",  # Ensure this matches the server's dataset_name
+            "dataset_name": dataset_name,  # Ensure this matches
         }
 
-        response = requests.post(self.url_reset, json=payload, timeout=10)
+        response = requests.post(self.url_reset, json=payload, timeout=15)
+        response.raise_for_status()
+        return response.text
+
+
+class HamerController():
+    def __init__(self, ip, port):
+        self.server = ip
+        self.port = port
+        self.url_query = f"http://{self.server}:{self.port}/query"
+        self.url_reset = f"http://{self.server}:{self.port}/reset"
+
+    def __call__(self, observation: np.ndarray):
+
+        payload = {"observation": observation}
+
+        # spec = lambda x: jax.tree.map(lambda arr: type(arr), x)
+        # pprint(spec(payload))
+        # payload = jp.dumps(payload)
+
+        out = self.send_observation_and_get_action(payload)
+        return out
+
+    def send_observation_and_get_action(self, payload):
+        """note from klaud
+        they json-ify the data twice
+        """
+
+        try:
+            # Set timeout to avoid hanging
+            response = requests.post(self.url_query, json=payload, timeout=15)
+            response.raise_for_status()
+
+            out = jax.tree.map(jp.loads,response.text)
+            out = jax.tree.map(jp.loads,out)
+
+            if not isinstance(out, dict):
+                raise ValueError(f"We have a problem")
+            return out
+        except Exception as e:
+            print(f"Request failed: {e}")
+            return {}
+
+    def reset(self):
+        payload = {}
+        response = requests.post(self.url_reset, json=payload, timeout=15)
         response.raise_for_status()
         return response.text
 

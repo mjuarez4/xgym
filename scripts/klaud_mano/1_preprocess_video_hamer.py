@@ -1,140 +1,128 @@
 import shutil
 from pathlib import Path
 from pprint import pprint
+from typing import Any, Callable, TypeVar, overload
 
 import cv2
-import hamer
-import imageio
 import jax
 import jax.numpy as jnp
-import local
 import numpy as np
-import tensorflow as tf
-import torch
-from hamer.configs import CACHE_DIR_HAMER
-from hamer.datasets.vitdet_dataset import (DEFAULT_MEAN, DEFAULT_STD,
-                                           ViTDetDataset)
-from hamer.models import (DEFAULT_CHECKPOINT, HAMER, MANO, download_models,
-                          load_hamer)
-from hamer.utils import SkeletonRenderer, recursive_to
-from hamer.utils.geometry import perspective_projection
-from hamer.utils.render_openpose import render_openpose
-from hamer.utils.renderer import Renderer, cam_crop_to_full
-from my_oakink_test_new import flatten, get_config, infer, init_detector
 from PIL import Image
-from smplx.utils import (Array, MANOOutput, SMPLHOutput, SMPLOutput,
-                         SMPLXOutput, Struct, Tensor, to_np, to_tensor)
 from tqdm import tqdm
-from vitpose_model import ViTPoseModel
 from xgym import MANO_1, MANO_1DONE, MANO_2
-
-# xgym_path = Path(__file__).resolve().parents[2]  # Adjust path to ~/repos/xgym
-# sys.path.append(str(xgym_path))
+from xgym.controllers import HamerController
 
 
-def extract_npz_files(i, img, detector, vitpose, device, model, model_cfg, renderer):
+def stack(seq: list[dict]):
+    """Stacks all frames in the seq into arrays for saving."""
 
-    out = infer(i, img, detector, vitpose, device, model, model_cfg, renderer)
-
-    out = jax.tree.map(lambda x: x[0], out.data, is_leaf=lambda x: isinstance(x, list))
-
-    out = flatten(out)
-    clean = lambda x: x.detach().cpu().numpy() if isinstance(x, torch.Tensor) else x
-    out = jax.tree.map(clean, out)
-
-    return out
-
-
-def stack_sequence(sequence):
-    """ Stacks all frames in the sequence into arrays for saving. """
     stacked = {}
-    for key in sequence[0].keys():
-        stacked[key] = np.stack([step[key] for step in sequence], axis=0)
+    for k in seq[0].keys():
+        print(k)
+        stacked[k] = np.stack([s[k] for s in seq], axis=0)
+    return stacked
+
+    stacked = {k: np.stack([s[k] for s in seq], axis=0) for k in seq[0].keys()}
     return stacked
 
 
-def process_sequence(sequence):
-    """ Filters frames to ensure only right-hand detections are included. """
-    is_right = int(np.array([step["right"].mean() for step in sequence]).mean() > 0.5)
-
-    if not is_right:
-        return None  # Skip sequences with no right-hand detections
-
-    def select_hand(x):
-        if x.shape and x.shape[0] == 2:
-            return x[is_right]
-        if x.shape and x.shape[0] == 1:
-            return x[0]
-        return x
-
-    processed_sequence = []
-    for step in sequence:
-        step = jax.tree_map(select_hand, step)
-        processed_sequence.append(step)
-
-    return processed_sequence
+def spec(thing: dict[str, np.ndarray]):
+    return jax.tree.map(lambda x: x.shape, thing)
 
 
-def pipeline(frame, out):
+example = {
+    "box_center": (1, 2),
+    "box_size": (1,),
+    "focal_length": (1, 2),
+    "img": (1, 3, 256, 256),
+    "img_size": (1, 2),
+    "personid": (1,),
+    "pred_cam": (1, 3),
+    "pred_cam_t": (1, 3),
+    "pred_cam_t_full": (1, 3),
+    "pred_keypoints_2d": (1, 21, 2),
+    "pred_keypoints_3d": (1, 21, 3),
+    "pred_mano_params.betas": (1, 10),
+    "pred_mano_params.global_orient": (1, 1, 3, 3),
+    "pred_mano_params.hand_pose": (1, 15, 3, 3),
+    "pred_vertices": (1, 778, 3),
+    "right": (1,),
+    "scaled_focal_length": (),
+}
 
-    # center crop to 224
-    pass
 
+def postprocess_sequence(seq: list[dict]):
+    """Filters frames to ensure only right-hand detections are included.
+    returns:
+        dict: the filtered seq
+        bool: whether the seq is usable
+    """
 
-def get_total_frames(vpath):
-    """ Get the total number of frames in the video using OpenCV. """
-    cap = cv2.VideoCapture(str(vpath))  # Ensure video path is converted to string
-    if not cap.isOpened():
-        print(f"Error: Cannot open the video file: {vpath}")
-        return -1
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    cap.release()
-    return total_frames
+    is_right = np.array([s["right"].mean() for s in seq]).mean()
+    is_right = is_right > 0.5
+
+    if not is_right:  # skip if predominantly left hand
+        return {}, False
+
+    def select_hand(s):
+
+        # if x looks like the example then not batched
+        not_batched = all([s[k].shape == example[k] for k in s.keys()])
+        not_batched = True # squeeze helped
+
+        def _select(x):
+            if not_batched:
+                return x[is_right]
+            else:
+                return x[0, is_right]
+            return x
+
+        return jax.tree.map(_select, s)
+
+    out = [select_hand(s) for s in seq]
+    return out, True
 
 
 def main():
 
-    # Download and load models
-    download_models(CACHE_DIR_HAMER)
-    model, model_cfg = load_hamer()
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    model = model.to(device)
-    model.eval()
+    hamer = HamerController("aisec-102.cs.luc.edu", 8001)
 
-    # Initialize supporting models
-    detector = init_detector()
-    vitpose = ViTPoseModel(device)
-    renderer = Renderer(model_cfg, faces=model.mano.faces)
+    files = list(MANO_1.glob("*.npz"))
+    print(files)
 
-    # Process all videos in MANO_1
-    video_files = list(MANO_1.glob("*.mp4"))
-    for vpath in video_files:
-        print(f"Processing video: {vpath.name}")
-        sequence = []
-        reader = imageio.get_reader(vpath)
-        total_frames = get_total_frames(vpath)
+    files = [f for f in files if "7" in f.name]
 
-        print(f"The video contains {total_frames} frames.")
-        for i, frame in tqdm(enumerate(reader), desc=f"Processing {vpath.name}"):
-            try:
-                out = extract_npz_files(
-                    i, frame, detector, vitpose, device, model, model_cfg, renderer
-                )
-                sequence.append(out)
-            except Exception as e:
-                print(f"Error processing frame {i} in {vpath.name}: {e}")
+    for path in tqdm(files, leave=False):
+        print(f"Processing video: {path.name}")
 
-        # Filter sequence for right-hand detections only
-        filtered_sequence = process_sequence(sequence)
-        if filtered_sequence is not None:
-            stacked_sequence = stack_sequence(filtered_sequence)
+        data = np.load(path)
+        data = {k: data[k] for k in data.files}
 
-            output_npz_path = MANO_2 / f"{vpath.stem}_filtered.npz"
-            np.savez(output_npz_path, **stacked_sequence)
+        for k, v in tqdm(data.items(), leave=False):  # for each view in the episode
+            outs = []
+            for i, frame in tqdm(enumerate(v[45:50]), total=len(v)):
 
-        # Move processed video to MANO_1DONE
-        shutil.move(str(vpath), MANO_1DONE / vpath.name)
-        print(f"Moved {vpath.name} to {MANO_1DONE}")
+                cv2.imshow("frame", frame)
+                cv2.waitKey(1)
+
+                out = hamer(frame)
+                {k:v.squeeze() for k, v in out.items()} 
+                pprint(spec(out))
+                if out is None or out == {}:
+                    continue
+                print(out["right"].mean())
+                outs.append(out)
+
+            outs, ok = postprocess_sequence(outs)
+            if not ok:
+                continue
+
+            # list of dict to dict of stacked np arrays
+            pprint(spec(outs))
+            outs = stack(outs)
+            np.savez(MANO_2 / f"{path.stem}_{k}_filtered.npz", **outs)
+
+        # shutil.move(str(path), MANO_1DONE / path.name)
 
 
 if __name__ == "__main__":
