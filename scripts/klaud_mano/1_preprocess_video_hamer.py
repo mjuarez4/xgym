@@ -15,7 +15,6 @@ from xgym.controllers import HamerController
 
 def stack(seq: list[dict]):
     """Stacks all frames in the seq into arrays for saving."""
-
     stacked = {}
     for k in seq[0].keys():
         print(k)
@@ -159,11 +158,7 @@ def solve_2d(frame, out):
 def main():
 
     hamer = HamerController("aisec-102.cs.luc.edu", 8001)
-
     files = list(MANO_1.glob("*.npz"))
-    print(files)
-
-    # files = [f for f in files if "7" in f.name]
 
     for path in tqdm(files, leave=False):
         print(f"Processing video: {path.name}")
