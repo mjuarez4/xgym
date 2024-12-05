@@ -371,8 +371,8 @@ class ModelController(Controller):
         response = requests.post(self.url_query, json=payload, timeout=15)
         response.raise_for_status()
         response_text = response.text
-        action = json_numpy.loads(response_text)  # 2x json-ified
-        action = json_numpy.loads(action)
+        action = jp.loads(response_text)  # 2x json-ified
+        action = jp.loads(action)
         return action
 
     def reset(self):
