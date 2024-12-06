@@ -97,16 +97,6 @@ def main():
         _action = None
         for step in tqdm(ep["steps"], desc=f"EP{ep}"):  # 3 episodes
 
-            # remap obs
-            print(obs["img"].keys())
-            obs["img"] = {
-                "window": obs["img"]["camera_0"],
-                "front_l": obs["img"]["camera_2"],
-                "front_r": obs["img"]["camera_10"],
-                "overhead": obs["img"]["camera_12"],
-                "wrist": obs["img"]["wrist"],
-            }
-
             step = jax.tree_map(lambda x: np.array(x), step)
             spec = lambda x: x.shape
             print(jax.tree.map(spec, step))
@@ -157,9 +147,11 @@ def main():
             """
 
             actions = model(
-                primary=obs["img"]["window"],
+                primary=obs["img"]["worm"],
                 high=obs["img"]["overhead"],
                 wrist=obs["img"]["wrist"],
+                side=obs["img"]["side"],
+                # proprio=proprio.tolist(),
             ).copy()
 
             for action in actions:

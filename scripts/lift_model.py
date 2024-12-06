@@ -18,9 +18,9 @@ from bsuite.utils.gym_wrapper import DMEnvFromGym, GymFromDMEnv
 from pynput import keyboard
 from tqdm import tqdm
 
-from xgym.controllers import (KeyboardController, ModelController,
-                              ScriptedController)
+from xgym.controllers import KeyboardController, ScriptedController
 from xgym.gyms import Base, Lift, Stack
+from xgym.model_controllers import ModelController
 from xgym.utils import boundary as bd
 from xgym.utils import camera as cu
 from xgym.utils.boundary import PartialRobotState as RS
@@ -43,13 +43,18 @@ def main():
     os.makedirs(cfg.data_dir, exist_ok=True)
 
     # @ethan TODO make this a configurable parameter? see scripts/reader_rlds and github.com/dlwh/draccus
-    model = ModelController("carina.cs.luc.edu", 8001, ensemble=False, task='lift')
+    model = ModelController(
+        "carina.cs.luc.edu",
+        8001,
+        ensemble=False,
+        task="stack",
+    )
     # model = ModelController("aisec-102.cs.luc.edu", 8001, ensemble=True)
     # model = ModelController("dijkstra.cs.luc.edu", 8001, ensemble=True)
     model.reset()
 
     # env = gym.make("xgym/stack-v0")
-    env = Lift(out_dir=cfg.data_dir, random=False)
+    env = Lift(out_dir=cfg.data_dir, random=True)
     env.logger.warning(model.tasks[model.task])
 
     # ds = tfds.load("xgym_lift_single", split="train")
@@ -93,7 +98,7 @@ def main():
                 high=obs["img"]["overhead"],
                 wrist=obs["img"]["wrist"],
                 side=obs["img"]["side"],
-                proprio=proprio.tolist(),
+                # proprio=proprio.tolist(),
             ).copy()
 
             print(actions.round(3))

@@ -4,12 +4,9 @@ from pprint import pprint
 import cv2
 import imageio
 import numpy as np
-import torch
 from PIL import Image, ImageEnhance
 from scipy.optimize import least_squares
 from tqdm import tqdm
-
-import local
 
 
 def add_col(x):

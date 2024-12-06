@@ -124,6 +124,8 @@ class Base(gym.Env):
         self.action_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32
         )  # xyzrpyg
+
+        """
         self.observation_space = spaces.Dict(
             {
                 "robot": spaces.Dict(
@@ -154,6 +156,7 @@ class Base(gym.Env):
                 ),
             }
         )
+        """
 
         print("Initializing Base.")
         # Initialize Robot
@@ -185,7 +188,7 @@ class Base(gym.Env):
             [
                 bd.CartesianBoundary(
                     min=RS(cartesian=[150, -350, 55]), # 5mm safety margin
-                    max=RS(cartesian=[800, -350, 300]),
+                    max=RS(cartesian=[800, 350, 800]),
                 ),
                 # bd.AngularBoundary(
                 # min=RS(

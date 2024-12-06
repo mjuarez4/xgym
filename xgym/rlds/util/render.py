@@ -1,9 +1,6 @@
 import json
 from typing import Optional
 
-import torch
-from torch.nn import functional as F
-
 """
 Render OpenPose keypoints.
 Code was ported to Python from the official C++ implementation https://github.com/CMU-Perceptual-Computing-Lab/openpose/blob/master/src/openpose/utilities/keypoint.cpp

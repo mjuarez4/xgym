@@ -21,8 +21,9 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from pynput import keyboard
 from tqdm import tqdm
 
-from xgym.controllers import (KeyboardController, ModelController,
+from xgym.controllers import (KeyboardController, 
                               ScriptedController, SpaceMouseController)
+from xgym.model_controllers import ModelController
 from xgym.gyms import Base, Lift, Stack
 from xgym.utils import boundary as bd
 from xgym.utils import camera as cu
@@ -37,7 +38,7 @@ class RunCFG:
     time: str = time.strftime("%Y%m%d-%H%M%S")
     env_name: str = f"xgym-sandbox-{task}-v0-{time}"
     data_dir: str = osp.join(base_dir, env_name)
-    nsteps: int = 30
+    nsteps: int = 100 #added steps for bean  pour
 
 
 
@@ -77,7 +78,7 @@ def main(cfg: RunCFG):
     agent = SpaceMouseController()
 
     # env = gym.make("xgym/stack-v0")
-    env = Lift(out_dir=cfg.data_dir, random=True)
+    env = Lift(out_dir=cfg.data_dir, random=False)
 
     # ds = tfds.load("xgym_lift_single", split="train")
 

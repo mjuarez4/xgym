@@ -37,26 +37,6 @@ class Lift(Base):
         # ready = self.kin_inv(np.concatenate([ready.cartesian, ready.aa]))
         # self.ready = RS(joints=ready)
 
-        self.boundary = bd.AND(
-            [
-                bd.CartesianBoundary(
-                    min=RS(cartesian=[150, -350, 50]),
-                    max=RS(cartesian=[800, -350, 300]),
-                ),
-                # bd.AngularBoundary(
-                # min=RS(
-                # aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2])
-                # + self.start_angle
-                # ),
-                # max=RS(
-                # aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2])
-                # + self.start_angle
-                # ),
-                # ),
-                bd.GripperBoundary(min=10 / 850, max=1),
-            ]
-        )
-
     def reset(self):
         ret = super().reset()
 

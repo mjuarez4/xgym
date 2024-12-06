@@ -8,10 +8,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import tensorflow as tf
-import torch
 from tqdm import tqdm
 
-import local
 from ._util import add_col, remove_col
 
 
