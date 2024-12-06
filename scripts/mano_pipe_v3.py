@@ -179,9 +179,6 @@ def main():
             outs = []
             for i, frame in tqdm(enumerate(v), total=len(v)):
 
-                cv2.imshow("frame", frame)
-                cv2.waitKey(1)
-
                 out = hamer(frame)
                 try:
                     # patch because img is the only one with no batch dim
