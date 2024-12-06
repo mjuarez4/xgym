@@ -74,6 +74,7 @@ def main(cfg: RunCFG):
 
             _ = {k: cam.grab() for k, cam in cams.items()}
             imgs = {k: cam.retrieve()[1] for k, cam in cams.items()}
+            imgs = {k:cv2.cvtColor(v, cv2.COLOR_RGB2BGR) for k,v in imgs.items()}
             imgs = {k: cu.square(f) for k, f in imgs.items()}
             imgs = {k: cv2.resize(f, (224, 224)) for k, f in imgs.items()}
 

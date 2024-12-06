@@ -165,8 +165,8 @@ def solve_2d(out: dict):
 
 def main():
 
-    # hamer = HamerController("aisec-102.cs.luc.edu", 8001)
-    hamer = HamerController("0.0.0.0", 8001)
+    hamer = HamerController("aisec-102.cs.luc.edu", 8001)
+    # hamer = HamerController("0.0.0.0", 8001)
     files = list(MANO_1.glob("*.npz"))
 
     for path in tqdm(files, leave=False):
@@ -179,12 +179,12 @@ def main():
             outs = []
             for i, frame in tqdm(enumerate(v), total=len(v)):
 
-                # cv2.imshow("frame", frame)
-                # cv2.waitKey(1)
-
                 out = hamer(frame)
-                # patch because img is the only one with no batch dim
-                out["img"] = out["img"][None]
+                try:
+                    # patch because img is the only one with no batch dim
+                    out["img"] = out["img"][None]
+                except: # hamer failed ie: person not in frame
+                    continue
 
                 out = remap_keys(out)
                 if out is None or out == {}:
@@ -192,6 +192,8 @@ def main():
 
                 outs.append(out)
 
+            if len(outs) == 0: # hamer failed for all frames?
+                continue
             outs, ok = postprocess_sequence(outs)
             if not ok:
                 continue
