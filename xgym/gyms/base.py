@@ -124,6 +124,8 @@ class Base(gym.Env):
         self.action_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32
         )  # xyzrpyg
+
+        """
         self.observation_space = spaces.Dict(
             {
                 "robot": spaces.Dict(
@@ -154,6 +156,7 @@ class Base(gym.Env):
                 ),
             }
         )
+        """
 
         print("Initializing Base.")
         # Initialize Robot
@@ -168,7 +171,7 @@ class Base(gym.Env):
         self.robot.set_state(0)
         self.robot.set_gripper_enable(True)
         self.robot.set_gripper_mode(0)
-        self.robot.set_gripper_speed(1000)
+        self.robot.set_gripper_speed(3000)
         self.robot.set_gripper_position(800, wait=False)
         logger.info("Robot initialized.")
 
@@ -184,19 +187,19 @@ class Base(gym.Env):
         self.boundary = bd.AND(
             [
                 bd.CartesianBoundary(
-                    min=RS(cartesian=[350, -350, 1]),
-                    max=RS(cartesian=[500, -75, 300]),
+                    min=RS(cartesian=[150, -350, 55]), # 5mm safety margin
+                    max=RS(cartesian=[800, 350, 800]),
                 ),
-                #bd.AngularBoundary(
-                 #   min=RS(
-                 #       aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2])
-                 #       + self.start_angle
-                 #   ),
-                 #   max=RS(
-                 #       aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2])
-                 #       + self.start_angle
-                 #   ),
-               # ),
+                # bd.AngularBoundary(
+                # min=RS(
+                # aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2])
+                # + self.start_angle
+                # ),
+                # max=RS(
+                # aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2])
+                # + self.start_angle
+                # ),
+                # ),
                 # bd.GripperBoundary(min=10, max=800),
                 bd.GripperBoundary(min=self.GRIPPER_MIN / self.GRIPPER_MAX, max=1),
             ]
@@ -226,15 +229,7 @@ class Base(gym.Env):
 
         # anything else?
         self.ready = RS(
-            joints=[
-                -0.223213,
-                -0.228721,
-                0.021959,
-                1.018191,
-                0,
-                1.246863,
-                1.367298,
-            ]
+            joints=[0.078, -0.815, -0.056, 0.570, -0.042, 1.385, 0.047]
             # rpy=[np.pi, 0, -np.pi/2]
         )
 
@@ -244,6 +239,7 @@ class Base(gym.Env):
         self.out_dir = osp.expanduser(out_dir)
 
         self._done = False
+        self.limit_torque = np.array([15, 45, 10, 25, 5, 5, 5])
 
     def _init_cameras(self):
         logger.info("Initializing cameras.")
@@ -258,6 +254,14 @@ class Base(gym.Env):
         # logitech cameras
         cams = cu.list_cameras()
         self.cams = {k: MyCamera(cam) for k, cam in cams.items()}
+
+        # must be manually verified if changed
+        self.cams = {
+            "worm": self.cams[0],
+            'overhead': self.cams[2],
+            'side': self.cams[10],
+            }
+
         print(self.cams)
 
         # cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.imsize)
@@ -355,16 +359,17 @@ class Base(gym.Env):
 
         self._go_joints(self.ready, relative=False)
         self.robot.set_position(
-            x=400,
-            y=-180,
+            x=250,
+            y=0,
             z=250,
             roll=np.pi,
             pitch=0,
-            yaw=-np.pi / 2,
+            yaw=0,  # -np.pi / 2,
             relative=False,
             wait=True,
         )
         self.ready = self.position
+        logger.info(f"Ready position: {self.ready}")
 
         time.sleep(0.1)
 
@@ -426,12 +431,24 @@ class Base(gym.Env):
 
     @timer
     def step(self, action):
+        if self.mode == 2:
+            try:
+                raise ValueError("Robot in manual mode")
+            except ValueError as e:
+                logger.error(e)
+                return (
+                    self.observation(),
+                    np.array(-1.0, dtype=np.float64),
+                    self._done,
+                    {},
+                )
+
         try:
             action = self.safety_check(action)
             self._step(action, wait=self.mode == 0)
             obs = self.episode[-1] if len(self.episode) else self.observation()
             return self.observation(), np.array(0.0, dtype=np.float64), self._done, {}
-        except OutOfBoundsError as e:
+        except Exception as e:
             print(e)
             obs = self.episode[-1] if len(self.episode) else self.observation()
             return obs, np.array(-1.0, dtype=np.float64), self._done, {}
@@ -451,7 +468,7 @@ class Base(gym.Env):
             logger.info("skipping gripper for speed")
 
         print(f"waiting: {wait}")
-        if wait :
+        if wait:
             self.robot.set_position(
                 x=act.cartesian[0],
                 y=act.cartesian[1],
@@ -478,6 +495,8 @@ class Base(gym.Env):
                 wait=wait,
             )
 
+        # self.safety_torque_limit()
+
     def send(self, action):
         """only for spacemouse"""
 
@@ -500,11 +519,12 @@ class Base(gym.Env):
 
     @timer
     def look(self):
+        size = (self.imsize, self.imsize)
         image, depth = self.rs.read()
-        imgs = {f"camera_{k}": cam.read() for k, cam in self.cams.items()}
+        image = cv2.resize(image, size)
+        imgs = {f"{k}": cam.read() for k, cam in self.cams.items()}
         imgs["wrist"] = image
 
-        size = (self.imsize, self.imsize)
         imgs = {k: cv2.resize(cu.square(v), size) for k, v in imgs.items()}
 
         # image = np.concatenate([image, img], axis=1)
@@ -525,7 +545,19 @@ class Base(gym.Env):
         elif mode == "rgb_array":
             return imgs
 
+    def safety_torque_limit(self):
+        t = np.abs(self.torque)
+        if np.any(t > self.limit_torque):
+            logger.error(f"torque limit reached: {t}")
+            self.set_mode(2)
+            time.sleep(0.01)
+            self.set_mode(2)
+            raise ValueError("Torque limit exceeded")
+
     def safety_check(self, action):
+
+        # self.safety_torque_limit()
+
         logger.debug(self.position)
         act = RS.from_vector(action)
         new = self.position + act
@@ -585,6 +617,10 @@ class Base(gym.Env):
     @property
     def angles(self):
         return self.robot.angles
+
+    @property
+    def torque(self):
+        return np.array(self.robot.joints_torque)
 
     @property
     def state(self):
@@ -660,15 +696,16 @@ class Base(gym.Env):
 
     def set_mode(self, mode):
         if mode == 2:
-            self.robot.set_mode(2, detection_param=1)
+            code = self.robot.set_mode(2, detection_param=1)
+            print(f"set_mode: code={code}")
             self.robot.set_teach_sensitivity(1, wait=True)
         else:
             self.robot.set_mode(mode)
 
         self.robot.set_state(0)
         self.mode = mode
-        time.sleep(0.1)
-        logger.info(f"mode: {self.robot.mode}|{self.robot.state}")
+        time.sleep(0.01)
+        logger.info(f"mode: {self.robot.mode} | state: {self.robot.state}")
 
     def stop(self, toggle=False):
 

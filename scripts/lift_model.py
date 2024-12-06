@@ -5,22 +5,22 @@ from dataclasses import dataclass, field
 
 import cv2
 import draccus
-import envlogger
+# import envlogger
 import gymnasium as gym
 import jax
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
 from bsuite.utils.gym_wrapper import DMEnvFromGym, GymFromDMEnv
-from envlogger.backends.tfds_backend_writer import \
-    TFDSBackendWriter as TFDSWriter
-from envlogger.testing import catch_env
+# from envlogger.backends.tfds_backend_writer import \
+# TFDSBackendWriter as TFDSWriter
+# from envlogger.testing import catch_env
 from pynput import keyboard
 from tqdm import tqdm
 
-from xgym.controllers import (KeyboardController, ModelController,
-                              ScriptedController)
+from xgym.controllers import KeyboardController, ScriptedController
 from xgym.gyms import Base, Lift, Stack
+from xgym.model_controllers import ModelController
 from xgym.utils import boundary as bd
 from xgym.utils import camera as cu
 from xgym.utils.boundary import PartialRobotState as RS
@@ -41,31 +41,13 @@ cfg = RunCFG()
 def main():
 
     os.makedirs(cfg.data_dir, exist_ok=True)
-    dataset_config = tfds.rlds.rlds_base.DatasetConfig(
-        name=cfg.env_name,
-        observation_info=tfds.features.FeaturesDict(
-            {
-                "robot": tfds.features.FeaturesDict(
-                    {
-                        "joints": tfds.features.Tensor(shape=(7,), dtype=np.float64),
-                        "position": tfds.features.Tensor(shape=(7,), dtype=np.float64),
-                    }
-                ),
-                "img": tfds.features.FeaturesDict(
-                    {
-                        "camera_0": tfds.features.Tensor(
-                            shape=(640, 640, 3), dtype=np.uint8
-                        ),
-                        "wrist": tfds.features.Tensor(
-                            shape=(640, 640, 3), dtype=np.uint8
-                        ),
-                    }
-                ),
-            }
-        ),
-        action_info=tfds.features.Tensor(shape=(7,), dtype=np.float64),
-        reward_info=tfds.features.Tensor(shape=(), dtype=np.float64),
-        discount_info=tfds.features.Tensor(shape=(), dtype=np.float64),
+
+    # @ethan TODO make this a configurable parameter? see scripts/reader_rlds and github.com/dlwh/draccus
+    model = ModelController(
+        "carina.cs.luc.edu",
+        8001,
+        ensemble=False,
+        task="stack",
     )
 
     # env: Base = gym.make("luc-base")
@@ -76,91 +58,86 @@ def main():
     model.reset()
 
     # env = gym.make("xgym/stack-v0")
-    _env = Lift(out_dir=cfg.data_dir, random=False)
+    env = Lift(out_dir=cfg.data_dir, random=True)
+    env.logger.warning(model.tasks[model.task])
 
     # ds = tfds.load("xgym_lift_single", split="train")
 
     freq = 5  # hz
     dt = 1 / freq
 
-    with _env as env:
+    for ep in tqdm(range(100), desc="Episodes"):
+        obs = env.reset()
+        env.set_mode(7)
+        time.sleep(0.4)
+        env.start_record()
 
-        for ep in tqdm(range(10), desc="Episodes"):
-            obs = env.reset()
-            env.set_mode(7)
-            time.sleep(0.4)
-            env.start_record()
+        # timestep = env.reset()
+        # obs = timestep.observation
+        for _ in tqdm(range(75), desc=f"EP{ep}"):  # 3 episodes
 
-            # timestep = env.reset()
-            # obs = timestep.observation
-            for _ in tqdm(range(55), desc=f"EP{ep}"):  # 3 episodes
+            tic = time.time()
+            print("\n" * 3)
 
-                tic = time.time()
-                print("\n" * 3)
+            # remap obs
+            print(obs["img"].keys())
 
-                obs["img"] = jax.tree_map(
-                    lambda x: cv2.resize(np.array(x), (224, 224)), obs["img"]
-                )
+            obs["img"] = jax.tree_map(
+                lambda x: cv2.resize(np.array(x), (224, 224)), obs["img"]
+            )
 
-                print(obs["img"].keys())
+            cv2.imshow(
+                "data Environment",
+                cv2.cvtColor(cu.tile(cu.writekeys(obs["img"])), cv2.COLOR_RGB2BGR),
+            )
+            cv2.waitKey(1)  # 1 ms delay to allow for rendering
 
-                myimg = obs["img"]["camera_6"]
-                primary = obs["img"]["camera_10"]  #switched these (cam10->cam6, cam6->cam10) for 133026 eval
+            proprio = obs["robot"]["position"]
+            proprio = np.array(proprio)
+            proprio[:3] = proprio[:3] / 1e3
+            proprio[-1] = proprio[-1] / env.GRIPPER_MAX
 
-                cv2.imshow(
-                    "data Environment",
-                    cv2.cvtColor(cu.tile(cu.writekeys(obs["img"])), cv2.COLOR_RGB2BGR),
-                )
-                cv2.waitKey(1)  # 1 ms delay to allow for rendering
+            actions = model(
+                primary=obs["img"]["worm"],
+                high=obs["img"]["overhead"],
+                wrist=obs["img"]["wrist"],
+                side=obs["img"]["side"],
+                # proprio=proprio.tolist(),
+            ).copy()
 
-                # action = model(obs["img"]["camera_0"], obs['img']['wrist']).copy()
-                actions = model(
-                    primary=primary, high=myimg, wrist=obs["img"]["wrist"]
-                ).copy()
-                # action = action[0] # take first of 4 steps in chunk
+            print(actions.round(3))
+            for a, action in enumerate(actions):
 
-                if not model.ensemble:
-                    for a, action in enumerate(actions):
-                        tic = time.time() if a else tic
-                        action[:3] *= int(1e3)
-                        print(action.shape)
-                        action[3:6] = 0
-                        action[-1] = 0.2 if action[-1] < 0.8 else 1  # less gripper
-                        # action = action / 2
-                        print(f"action: {[round(x,4) for x in action.tolist()]}")
-                        # _env.render(mode="human")
+                action[:3] *= int(1e3)
+                print(action.shape)
+                action[-1] *= 0.8 if action[-1] < 0.5 else 1
+                # action[-1] *= 0 if action[-1] < 0.2 else 1
+                # action[-1] = 1 if action[-1] > 0.8 else action[-1]
 
-                        obs, reward, done, info = env.step(action)
-                        toc = time.time()
-                        elapsed = toc - tic
-                        time.sleep(max(0, dt - elapsed))  # 5hz
-                        print("ensembling") 
-                else:
-                      
-                    action = actions
-                    action[3:6] = 0
-                    action[:3] *= int(1e3)
-                    action[-1] = 0.2 if action[-1] < 0.8 else 1  # less gripper
-                    print(f"action: {[round(x,2) for x in action.tolist()]}")
-                    obs, reward, done, info = env.step(action)
-                    toc = time.time()
-                    elapsed = toc - tic
-                    time.sleep(max(0, dt - elapsed))  # 5hz
+                print(f"action: {[round(x,4) for x in action.tolist()]}")
+
+                obs, reward, done, info = env.step(action)
+                time.sleep(dt)
+
+                # toc = time.time()
+                # elapsed = toc - tic
+                # time.sleep(max(0, dt - elapsed))  # 5hz
+                # tic = time.time() if a else tic
 
                 print(f"done: {done}")
                 if done:
                     break
+            if done:
+                break
 
-                # timestep = env.step(action)
-                # obs = timestep.observation
+            # timestep = env.step(action)
+            # obs = timestep.observation
 
-            env.stop_record()
-            env.flush()
-            #env.auto_reset()
+        env.stop_record()
+        env.flush()
+        # env.auto_reset()
 
     env.close()
-    _env.close()
-
     quit()
 
 

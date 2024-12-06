@@ -7,15 +7,12 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 
 
-class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for LUC XGym Single Arm"""
+class XgymPlaySingle(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder for LUC XGym Single Arm v2.0.0"""
 
-    VERSION = tfds.core.Version("3.0.1")
+    VERSION = tfds.core.Version("2.0.0")
     RELEASE_NOTES = {
-        "1.0.0": "Initial release.",
-        "1.0.1": "Non blocking at 5hz... 3 world cams",
         "2.0.0": "teleoperated demos... high cam",
-        "3.0.0": "relocated out of sun ... renamed/repositioned cams",
     }
 
     def __init__(self, *args, **kwargs):
@@ -33,17 +30,23 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
                                 {
                                     "image": tfds.features.FeaturesDict(
                                         {
-                                            "worm": tfds.features.Image(
+                                            "front_l": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
-                                                doc="Low front logitech camera RGB observation.",
+                                                doc="Front left anker camera RGB observation.",
                                                 ),
-                                            "side": tfds.features.Image(
+                                            "front_r": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
-                                                doc="Low side view logitech camera RGB observation.",
+                                                doc="Front right anker camera RGB observation.",
+                                            ),
+                                            "window": tfds.features.Image(
+                                                shape=(224, 224, 3),
+                                                dtype=np.uint8,
+                                                encoding_format="png",
+                                                doc="Window logitech camera RGB observation.",
                                             ),
                                             "overhead": tfds.features.Image(
                                                 shape=(224, 224, 3),
@@ -118,7 +121,7 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
 
-        files = list(Path("~/xgym_lift3").expanduser().rglob("*.npz"))
+        files = list(Path("~/xgym_play").expanduser().rglob("*.npz"))
         return {"train": self._generate_examples(files)}
 
     def is_noop(self, action, prev_action=None, threshold=1e-3):
@@ -186,6 +189,16 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
                 lambda x: tf.image.resize(x, (224, 224)).numpy().astype(np.uint8),
                 ep.pop("img"),
             )
+
+            # must be manually checked
+            ep["image"] = {
+                "wrist": ep["image"]["wrist"],
+                "front_l": ep["image"]["camera_2"],
+                "front_r": ep["image"]["camera_10"],
+                "window": ep["image"]["camera_0"],
+                "overhead": ep["image"]["camera_12"],
+            }
+            
 
             episode = []
             n = len(ep["proprio"]["position"])

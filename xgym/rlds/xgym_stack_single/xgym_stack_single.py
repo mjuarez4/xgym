@@ -1,48 +1,19 @@
-import glob
-import json
-import os
-import os.path as osp
+from pathlib import Path
 from typing import Any, Iterator, Tuple
 
 import jax
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
-import tensorflow_hub as hub
 
 
-def downscale_to_224(height: int, width: int) -> Tuple[int, int]:
-    """
-    Downscale the image so that the shorter dimension is 224 pixels,
-    and the longer dimension is scaled by the same ratio.
+class XgymStackSingle(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder for LUC XGym Single Arm"""
 
-    Args:
-        height (int): The height of the image.
-        width (int): The width of the image.
-
-    Returns:
-        Tuple[int, int]: The new height and width of the image.
-    """
-    # Determine the scaling ratio
-    if height < width:
-        ratio = 224.0 / height
-        new_height = 224
-        new_width = int(width * ratio)
-    else:
-        ratio = 224.0 / width
-        new_width = 224
-        new_height = int(height * ratio)
-
-    return new_height, new_width
-
-
-class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for LUC XGym Single Arm v1.0.1"""
-
-    VERSION = tfds.core.Version("1.0.1")
+    VERSION = tfds.core.Version("3.0.0")
     RELEASE_NOTES = {
-        "1.0.0": "Initial release.",
-        "1.0.1": "Non blocking at 5hz... 3 world cams",
+        "2.0.0": "Initial release.",
+        "3.0.0": "relocated.",
     }
 
     def __init__(self, *args, **kwargs):
@@ -60,29 +31,29 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
                                 {
                                     "image": tfds.features.FeaturesDict(
                                         {
-                                            "camera_0": tfds.features.Image(
+                                            "worm": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
-                                                doc="Main camera RGB observation.",
+                                                doc="Low front logitech camera RGB observation.",
+                                                ),
+                                            "side": tfds.features.Image(
+                                                shape=(224, 224, 3),
+                                                dtype=np.uint8,
+                                                encoding_format="png",
+                                                doc="Low side view logitech camera RGB observation.",
                                             ),
-                                            "camera_1": tfds.features.Image(
+                                            "overhead": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
-                                                doc="Main camera RGB observation.",
-                                            ),
-                                            "camera_2": tfds.features.Image(
-                                                shape=(224, 224, 3),
-                                                dtype=np.uint8,
-                                                encoding_format="png",
-                                                doc="Main camera RGB observation.",
+                                                doc="Overhead logitech camera RGB observation.",
                                             ),
                                             "wrist": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
                                                 encoding_format="png",
-                                                doc="Wrist camera RGB observation.",
+                                                doc="Wrist realsense camera RGB observation.",
                                             ),
                                         }
                                     ),
@@ -145,17 +116,8 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
 
-        root = osp.expanduser("~/tensorflow_datasets/xgym_single/source")
-        root = osp.expanduser("~/ducks/xgym-sandbox*")
-
-        files = glob.glob(root)
-        files = [f for f in files if any([x.endswith("npz") for x in os.listdir(f)])]
-
-        self.filtered = osp.expanduser("~/data/filtered.json")
-
-        return {
-            "train": self._generate_examples(files),
-        }
+        files = list(Path("~/xgym_stack3").expanduser().rglob("*.npz"))
+        return {"train": self._generate_examples(files)}
 
     def is_noop(self, action, prev_action=None, threshold=1e-3):
         """
@@ -201,16 +163,14 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
     def _generate_examples(self, paths) -> Iterator[Tuple[str, Any]]:
         """Generator of examples for each split."""
 
-        self._embed = hub.load(
-            "https://tfhub.dev/google/universal-sentence-encoder-large/5"
-        )
-        task = "pick up ducks"  # hardcoded for now
-        lang = self._embed([task])[0].numpy()  # embedding takes ≈0.06s
+        taskfile = next(Path().cwd().glob("*.npy"))
+        task = taskfile.stem.replace("_", " ")
+        lang = np.load(taskfile)
 
-        def _parse_example(idx, ep):
+        def _parse_example(ep):
 
             # assemble episode --> here we're assuming demos so we set reward to 1 at the end
-            ep = np.load(ep)
+            ep = np.load(str(path))
             ep = self.dict_unflatten({x: ep[x] for x in ep.files})
 
             if ep["robot"]["joints"].shape[1] != 7:
@@ -225,22 +185,12 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
                 ep.pop("img"),
             )
 
-            # patch
-            ep["image"] = {
-                **{"wrist": ep["image"]["wrist"]},
-                **{
-                    f"camera_{i}": ep["image"][x]
-                    for i, x in enumerate(
-                        [y for y in ep["image"].keys() if "camera" in y]
-                    )
-                },
-            }
-
             episode = []
             n = len(ep["proprio"]["position"])
 
             spec = lambda arr: jax.tree.map(lambda x: x.shape, arr)
             # print(spec(ep))
+            # quit()
 
             prevact = None
             for i in range(n - 1):
@@ -251,7 +201,6 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
 
                 act = next["proprio"]["position"] - step["proprio"]["position"]
                 act[:3] = act[:3] / int(1e3)
-                #act[3:6] = 0
                 act[-1] = step["proprio"]["position"][-1] / 850
 
                 # if norm is less than eps
@@ -274,17 +223,13 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
                     }
                 )
 
-            # create output data sample
-            sample = {"steps": episode, "episode_metadata": {}}
-
             # if you want to skip an example for whatever reason, simply return None
-            return idx, sample
+            sample = {"steps": episode, "episode_metadata": {}}
+            id = f"{path.parent.name}_{path.stem}"
+            return id, sample
 
         for path in paths:
-            ds = [osp.join(path, x) for x in os.listdir(path) if x.endswith("npz")]
-
-            for idx, ep in enumerate(ds):
-                yield _parse_example(f"{path}_{idx}", ep)
+            yield _parse_example(path)
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
         # beam = tfds.core.lazy_imports.apache_beam

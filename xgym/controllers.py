@@ -1,3 +1,5 @@
+import json_numpy as jp
+jp.patch()
 import os
 import threading
 import time
@@ -8,7 +10,6 @@ from pprint import pprint
 from typing import Any, Dict, Optional
 
 import jax
-import json_numpy
 # import keyboard
 import numpy as np
 import pynput
@@ -23,48 +24,58 @@ from pyspacemouse.pyspacemouse import SpaceNavigator
 class SpaceMouseConfig:
 
     # sensitivity
-    scale = np.array([
-        5.0,
-        5.0,
-        5.0,
-        0.02,
-        0.02,
-        0.02,
-        100,
-    ])
-    flip = [1,1,1,-1,-1,-1,1]
+    scale = np.array(
+        [
+            5.0,
+            5.0,
+            5.0,
+            0.02,
+            0.02,
+            0.02,
+            100,
+        ]
+    )
+    flip = [1, 1, 1, -1, -1, -1, 1]
     order = [0, 1, 2, 3, 5, 4, 6]
+
 
 class VelocitySMC(SpaceMouseConfig):
 
     # xyz, rpy, gripper
+    # yxz, rpy, gripper
     # rpy is rotation along x, y, z
-    scale = np.array([
-        100.0,
-        100.0,
-        100.0,
-        0.5,
-        0.5,
-        0.5,
-        100,
-    ])
-    flip = [1,1,1,-1,1,-1,1]
-    order = [0, 1, 2, 3, 5, 4, 6]
+    scale = np.array(
+        [
+            125.0,
+            125.0,
+            125.0,
+            0.5,
+            0.5,
+            0.5,
+            200,
+        ]
+    )
+
+    order = [1, 0, 2, 5, 3, 4, 6]
+    # applied after order
+    flip = [-1, 1, 1, -1, -1, -1, 1]
+    sensitivity = 1.5  # from 1 -> inf
 
 
 def ema_2d(data, window):
-    """ Calculate EMA for 2D array """
+    """Calculate EMA for 2D array"""
 
     alpha = 2 / (window + 1)  # Smoothing factor
     ema = np.empty_like(data)
-    ema[0, :] = data[0, :]  # Start with first row 
+    ema[0, :] = data[0, :]  # Start with first row
 
     for i in range(1, data.shape[0]):
         ema[i, :] = alpha * data[i, :] + (1 - alpha) * ema[i - 1, :]
 
     return ema
 
-class SpaceMouseController:
+
+class SpaceMouseController:  # from 1 -> inf
 
     def __init__(self, cfg: SpaceMouseConfig = VelocitySMC()):
 
@@ -136,21 +147,23 @@ class SpaceMouseController:
 
         else:  # x,y,z,roll,pitch,yaw,gripper
             gripper = self.state.buttons
-            gripper = (-1 * gripper[0] + gripper[1])
-            out = np.array([
-                self.state.x,
-                self.state.y,
-                self.state.z,
-                self.state.pitch,
-                self.state.yaw,
-                self.state.roll,
-                gripper,
-            ])
-            out = out[self.cfg.order] 
-            out = out ** 2 * np.sign(out)
-            out = out*self.cfg.scale*self.cfg.flip
+            gripper = -1 * gripper[0] + gripper[1]
+            out = np.array(
+                [
+                    self.state.x,
+                    self.state.y,
+                    self.state.z,
+                    self.state.pitch,
+                    self.state.yaw,
+                    self.state.roll,
+                    gripper,
+                ]
+            )
+            out = out[self.cfg.order]
+            # out = out ** self.cfg.sensitivity * np.sign(out) # make it less sensitive
+            out = out * self.cfg.scale * self.cfg.flip
 
-            self.hist = np.roll(self.hist, -1, axis=0) # smooth
+            self.hist = np.roll(self.hist, -1, axis=0)  # smooth
             self.hist[-1] = out
             # out = ema_2d(self.hist, 10)[-1]
 
@@ -292,70 +305,7 @@ class ScriptedController(Controller):
         self.action = 1
 
 
-class ModelController(Controller):
-    def __init__(self, ip, port, ensemble=True):
-        self.server = ip
-        self.port = port
-        self.url_query = f"http://{self.server}:{self.port}/query"
-        self.url_reset = f"http://{self.server}:{self.port}/reset"
-        self.ensemble = ensemble
 
-    def __call__(self, primary, high=None, wrist=None):
-
-        payload = {
-            "observation": {
-                "image_primary": primary.tolist(),
-                **({"wrist": wrist.tolist()} if wrist is not None else {}),
-                **({"high": high.tolist()} if high is not None else {}),
-            },
-            "modality": "l",  # can we use both? there is another letter for both
-            "ensemble": self.ensemble,
-            "model": "bafl",
-            "dataset_name": "xgym_single",  # Ensure this matches the server's dataset_name
-        }
-
-        spec = lambda x: jax.tree.map(lambda arr: type(arr), x)
-        # pprint(spec(payload))
-        # quit()
-
-        out = self.send_observation_and_get_action(payload)
-        return out
-
-    def send_observation_and_get_action(self, payload):
-        """note from klaud
-        they json-ify the data twice
-        """
-
-        # Set timeout to avoid hanging
-        response = requests.post(self.url_query, json=payload, timeout=10)
-        response.raise_for_status()
-        response_text = response.text
-        action = json_numpy.loads(response_text)  # 2x json-ified
-        action = json_numpy.loads(action)
-        return action
-
-    def reset(self):
-        payload = {
-            # "observation": {"image_primary": image.tolist()},
-            "text": "put the yellow block on the green block",
-            "modality": "l",  # can we use both? there is another letter for both
-            "ensemble": self.ensemble,
-            "model": "bafl",
-            "dataset_name": "xgym_single",  # Ensure this matches the server's dataset_name
-        }
-
-        response = requests.post(self.url_reset, json=payload, timeout=10)
-        response.raise_for_status()
-        return response.text
-
-
-def build_controller(mode="scripted"):
-    if mode == "scripted":
-        return ScriptedController()
-    elif mode == "model":
-        return ModelController()
-    else:
-        raise ValueError(f"Invalid mode: {mode}")
 
 
 def main():

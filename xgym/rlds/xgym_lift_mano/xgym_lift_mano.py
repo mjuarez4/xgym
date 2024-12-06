@@ -1,21 +1,21 @@
 from pathlib import Path
+from pprint import pprint
 from typing import Any, Iterator, Tuple
 
 import jax
 import numpy as np
-import tensorflow as tf
 import tensorflow_datasets as tfds
+import tensorflow_hub as hub
+from tqdm import tqdm
 
 
-class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for LUC XGym Single Arm"""
+class XgymLiftMano(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder for LUC XGym Mano"""
 
-    VERSION = tfds.core.Version("3.0.1")
+    VERSION = tfds.core.Version("3.0.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
-        "1.0.1": "Non blocking at 5hz... 3 world cams",
-        "2.0.0": "teleoperated demos... high cam",
-        "3.0.0": "relocated out of sun ... renamed/repositioned cams",
+        "3.0.0": "New location.",
     }
 
     def __init__(self, *args, **kwargs):
@@ -31,56 +31,59 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
                         {
                             "observation": tfds.features.FeaturesDict(
                                 {
-                                    "image": tfds.features.FeaturesDict(
-                                        {
-                                            "worm": tfds.features.Image(
-                                                shape=(224, 224, 3),
-                                                dtype=np.uint8,
-                                                encoding_format="png",
-                                                doc="Low front logitech camera RGB observation.",
-                                                ),
-                                            "side": tfds.features.Image(
-                                                shape=(224, 224, 3),
-                                                dtype=np.uint8,
-                                                encoding_format="png",
-                                                doc="Low side view logitech camera RGB observation.",
-                                            ),
-                                            "overhead": tfds.features.Image(
-                                                shape=(224, 224, 3),
-                                                dtype=np.uint8,
-                                                encoding_format="png",
-                                                doc="Overhead logitech camera RGB observation.",
-                                            ),
-                                            "wrist": tfds.features.Image(
-                                                shape=(224, 224, 3),
-                                                dtype=np.uint8,
-                                                encoding_format="png",
-                                                doc="Wrist realsense camera RGB observation.",
-                                            ),
-                                        }
+                                    "img": tfds.features.Image(
+                                        shape=(224, 224, 3),
+                                        dtype=np.uint8,
+                                        encoding_format="png",
+                                        doc="Main camera RGB observation.",
                                     ),
-                                    "proprio": tfds.features.FeaturesDict(
-                                        {
-                                            "joints": tfds.features.Tensor(
-                                                shape=[7],
-                                                dtype=np.float32,
-                                                doc="Joint angles. radians",
-                                            ),
-                                            "position": tfds.features.Tensor(
-                                                shape=[7],
-                                                dtype=np.float32,
-                                                doc="Joint positions. xyz millimeters (mm) and rpy",
-                                            ),
-                                        }
+                                    "img_wrist": tfds.features.Image(
+                                        shape=(224, 224, 3),
+                                        dtype=np.uint8,
+                                        encoding_format="png",
+                                        doc="RGB observation that follows the hand.",
+                                    ),
+                                    # "focal_length": tfds.features.Tensor( shape=(), dtype=np.float32),
+                                    "scaled_focal_length": tfds.features.Tensor(
+                                        shape=(), dtype=np.float32
+                                    ),
+                                    "keypoints_2d": tfds.features.Tensor(
+                                        shape=(21, 2),
+                                        dtype=np.float32,
+                                        doc="2D keypoints in pixel space.",
+                                    ),
+                                    "keypoints_3d": tfds.features.Tensor(
+                                        shape=(21, 3),
+                                        dtype=np.float32,
+                                        doc="3D keypoints in camera space.",
+                                    ),
+                                    "mano.betas": tfds.features.Tensor(
+                                        shape=(10,),
+                                        dtype=np.float32,
+                                        doc="Hand shape parameters.",
+                                    ),
+                                    "mano.global_orient": tfds.features.Tensor(
+                                        shape=(1, 3, 3),
+                                        dtype=np.float32,
+                                        doc="Global orientation of the hand.",
+                                    ),
+                                    "mano.hand_pose": tfds.features.Tensor(
+                                        shape=(15, 3, 3),
+                                        dtype=np.float32,
+                                        doc="Hand pose parameters.",
+                                    ),
+                                    "right": tfds.features.Tensor(
+                                        shape=(),
+                                        dtype=np.float32,
+                                        doc="True if right hand.",
                                     ),
                                 }
                             ),
-                            "action": tfds.features.Tensor(
-                                # do we need 8? for terminate episode action?
-                                shape=(7,),
-                                dtype=np.float32,
-                                doc="Robot action, consists of [xyz,rpy,gripper].",
-                            ),
+                            # "action": tfds.features.Tensor(
+                            # shape=(7,),
+                            # dtype=np.float32,
+                            # doc="Robot action, consists of [xyz,rpy,gripper].",
+                            # ),
                             "discount": tfds.features.Scalar(
                                 dtype=np.float32,
                                 doc="Discount if provided, default to 1.",
@@ -118,8 +121,10 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
 
-        files = list(Path("~/xgym_lift3").expanduser().rglob("*.npz"))
-        return {"train": self._generate_examples(files)}
+        from xgym import MANO_2, MANO_3, MANO_4
+
+        root = Path(MANO_4).expanduser().glob("*.npz")  # episodes are npz
+        return {"train": self._generate_examples(root)}
 
     def is_noop(self, action, prev_action=None, threshold=1e-3):
         """
@@ -135,6 +140,7 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
             So you also need to consider the current state (by checking the previous timestep's
             gripper action as a proxy) to determine whether the action really is a no-op.
         """
+
         # Special case: Previous action is None if this is the first action in the episode
         # Then we only care about criterion (1)
         if prev_action is None:
@@ -162,59 +168,48 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
             d[keys[-1]] = value
         return nest
 
-    def _generate_examples(self, paths) -> Iterator[Tuple[str, Any]]:
+    def _generate_examples(self, ds) -> Iterator[Tuple[str, Any]]:
         """Generator of examples for each split."""
 
+        # task = "embodiment:Human, task:pick up the red block"  # hardcoded for now
         taskfile = next(Path().cwd().glob("*.npy"))
         task = taskfile.stem.replace("_", " ")
         lang = np.load(taskfile)
 
-        def _parse_example(ep):
-
-            # assemble episode --> here we're assuming demos so we set reward to 1 at the end
-            ep = np.load(str(path))
-            ep = self.dict_unflatten({x: ep[x] for x in ep.files})
-
-            if ep["robot"]["joints"].shape[1] != 7:
-                ep["robot"]["joints"] = ep["robot"]["joints"].T  # patch
-
-            ep["proprio"] = jax.tree.map(
-                lambda x: x.astype(np.float32), ep.pop("robot")
-            )
-
-            ep["image"] = jax.tree_map(
-                lambda x: tf.image.resize(x, (224, 224)).numpy().astype(np.uint8),
-                ep.pop("img"),
-            )
-
-            episode = []
-            n = len(ep["proprio"]["position"])
+        def _parse_example(idx, ep):
 
             spec = lambda arr: jax.tree.map(lambda x: x.shape, arr)
-            # print(spec(ep))
+
+            ep = np.load(ep)
+            ep = {k: ep[k] for k in ep.files}
+            # ep = self.dict_unflatten({k: ep[k] for k in ep.files})
+
+            pprint(spec(ep))
             # quit()
 
-            prevact = None
-            for i in range(n - 1):
+            ep = {
+                k: v.astype(np.float32) if "img" not in k else v for k, v in ep.items()
+            }
 
-                prev = jax.tree.map(lambda x: x[i - 1], ep) if i > 0 else None
-                step = jax.tree.map(lambda x: x[i], ep)
+            next = None
+            episode = []  # last step is used for noop
+            for i, step in tqdm(enumerate(ep["img"][:-1]), total=len(ep)):
+
+                # prev = jax.tree.map(lambda x: x[i - 1], ep) if i > 0 else None
+                step = jax.tree.map(lambda x: x[i], ep) if next is None else next
                 next = jax.tree.map(lambda x: x[i + 1], ep)
 
-                act = next["proprio"]["position"] - step["proprio"]["position"]
-                act[:3] = act[:3] / int(1e3)
-                act[-1] = step["proprio"]["position"][-1] / 850
+                # act is only for finding noop
+                act = next["keypoints_2d"] - step["keypoints_2d"]
 
-                # if norm is less than eps
-                if self.is_noop(act, prevact):
+                # not moving more than <threshold>px
+                if self.is_noop(act, None, threshold=3):
                     continue
-
-                prevact = act
 
                 episode.append(
                     {
                         "observation": step,
-                        "action": act.astype(np.float32),
+                        # "action": act.astype(np.float32), # actions are on the fly for mano
                         "discount": 1.0,
                         "reward": float(i == (len(ep) - 1)),
                         "is_first": i == 0,
@@ -225,13 +220,14 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
                     }
                 )
 
-            # if you want to skip an example for whatever reason, simply return None
+            # create output data sample
             sample = {"steps": episode, "episode_metadata": {}}
-            id = f"{path.parent.name}_{path.stem}"
-            return id, sample
 
-        for path in paths:
-            yield _parse_example(path)
+            # if you want to skip an example for whatever reason, simply return None
+            return idx, sample
+
+        for idx, ep in enumerate(ds):
+            yield _parse_example(f"{ep}_{idx}", ep)
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
         # beam = tfds.core.lazy_imports.apache_beam

@@ -1,21 +1,23 @@
+import json
 from pathlib import Path
+from pprint import pprint
 from typing import Any, Iterator, Tuple
 
 import jax
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
+import tensorflow_hub as hub
 
 
-class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for LUC XGym Single Arm"""
+class XgymDuckSingle(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder for LUC XGym 'duck in basked' Single Arm v1.0.0"""
 
-    VERSION = tfds.core.Version("3.0.1")
+    VERSION = tfds.core.Version("3.0.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
-        "1.0.1": "Non blocking at 5hz... 3 world cams",
-        "2.0.0": "teleoperated demos... high cam",
-        "3.0.0": "relocated out of sun ... renamed/repositioned cams",
+        "2.0.0": "more data and overhead cam",
+        "3.0.0": "relocated setup",
     }
 
     def __init__(self, *args, **kwargs):
@@ -38,7 +40,7 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
                                                 dtype=np.uint8,
                                                 encoding_format="png",
                                                 doc="Low front logitech camera RGB observation.",
-                                                ),
+                                            ),
                                             "side": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
@@ -118,7 +120,8 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
 
-        files = list(Path("~/xgym_lift3").expanduser().rglob("*.npz"))
+        files = [x for x in Path("~/xgym_duck3").expanduser().rglob("*.npz")]
+
         return {"train": self._generate_examples(files)}
 
     def is_noop(self, action, prev_action=None, threshold=1e-3):
@@ -162,14 +165,14 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
             d[keys[-1]] = value
         return nest
 
-    def _generate_examples(self, paths) -> Iterator[Tuple[str, Any]]:
+    def _generate_examples(self, ds) -> Iterator[Tuple[str, Any]]:
         """Generator of examples for each split."""
 
         taskfile = next(Path().cwd().glob("*.npy"))
         task = taskfile.stem.replace("_", " ")
         lang = np.load(taskfile)
 
-        def _parse_example(ep):
+        def _parse_example(path):
 
             # assemble episode --> here we're assuming demos so we set reward to 1 at the end
             ep = np.load(str(path))
@@ -191,7 +194,8 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
             n = len(ep["proprio"]["position"])
 
             spec = lambda arr: jax.tree.map(lambda x: x.shape, arr)
-            # print(spec(ep))
+            # pprint(spec(ep))
+            # pprint(jax.tree.map(lambda x: x[1], ep)['proprio'])
             # quit()
 
             prevact = None
@@ -230,7 +234,7 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
             id = f"{path.parent.name}_{path.stem}"
             return id, sample
 
-        for path in paths:
+        for path in ds[1:]:
             yield _parse_example(path)
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)

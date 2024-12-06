@@ -22,7 +22,9 @@ class Lift(Base):
         self._proceed = False
 
         self.kb = KeyboardController()
-        self.kb.register(keyboard.Key.space, lambda: self.stop(toggle=True))
+        self.kb.register(
+            keyboard.Key.space, lambda: [self.set_mode(2), self.set_mode(2)]
+        )
         self.kb.register(keyboard.Key.enter, lambda: self.proceed())
 
         def _set_done():
@@ -34,27 +36,6 @@ class Lift(Base):
         # ready = RS(cartesian=[400, -125, 350], aa=[np.pi, 0, -np.pi / 2])
         # ready = self.kin_inv(np.concatenate([ready.cartesian, ready.aa]))
         # self.ready = RS(joints=ready)
-
-        self.boundary = bd.AND(
-            [
-                bd.CartesianBoundary(
-                    min=RS(cartesian=[120, -450, -25]),  # -500 give kinematic error
-                    max=RS(cartesian=[500, -180, 300]),  # y was -250
-                ),
-                #bd.AngularBoundary(
-                 #   min=RS(
-                  #      aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2])
-                   #     + self.start_angle
-                   # ),
-                   # max=RS(
-                   #     aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2])
-                   #     + self.start_angle
-                   # ),
-               # ),
-                bd.GripperBoundary(min=10 / 850, max=1),
-            ]
-        )
-
 
     def reset(self):
         ret = super().reset()
@@ -85,17 +66,24 @@ class Lift(Base):
 
         if self.random:
 
-            # random starting position
-            mod = np.random.choice([-1, 1], size=2)
-            rand = np.random.randint(10, 50, size=2) * mod
-            rand[1] *= np.random.choice([1, 1.5, 2], size=1) if rand[1] < 0 else 1
-            rand = rand.tolist()
-            randy = -abs(np.random.randint(10, 300, size=1) * mod)
+            # x= +- 100 y= -300 z= -275
+            self.logger.warning("randomizing position")
 
-            print(rand)
-            step = np.array([rand[0], randy[0], rand[1], 0, 0, 0, 1])
+            # 75% chance of randomizing
+            step = np.array(
+                [  # xyz
+                    25 * np.random.choice([-4, 0, 4, 6, 8, 10, 12, 14]),
+                    25 * np.random.choice([-12, -8, -4, 0, 4, 8, 12]),
+                    25 * np.random.choice([-7.5, -7, -6, -5, -4, -2, 0, 4, 8]),
+                    0,
+                    0,
+                    0,
+                    1,
+                ]
+            )
 
-            self._step(step)
+            if np.random.rand() < 0.75:
+                self._step(step)
 
         return self.observation()
 
