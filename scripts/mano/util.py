@@ -1,34 +1,34 @@
-
 import json_numpy
 
 json_numpy.patch()
-from collections import deque
-import time
-import traceback
-from typing import Any, Dict
-
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
-import numpy as np
-import tensorflow as tf
-import uvicorn
-
-
-
 import argparse
+import dataclasses
+import json
+import logging
 import os
 import os.path as osp
+import time
+import traceback
+from collections import deque
+from dataclasses import dataclass, field
 from pathlib import Path
+from pprint import pprint
+from typing import Any, Dict, List, Optional
 
 import cv2
+import draccus
 import imageio
 import jax
 import numpy as np
+import tensorflow as tf
 import torch
+import uvicorn
+from colorama import Fore, Style, init
+from draccus.argparsing import ArgumentParser as AP
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from hamer.configs import CACHE_DIR_HAMER
-from hamer.datasets.vitdet_dataset import (DEFAULT_MEAN, DEFAULT_STD,
-                                           ViTDetDataset)
-# from manotorch.manolayer import ManoLayer, MANOOutput
+from hamer.datasets.vitdet_dataset import DEFAULT_MEAN, DEFAULT_STD
 from hamer.models import (DEFAULT_CHECKPOINT, HAMER, MANO, download_models,
                           load_hamer)
 from hamer.utils import SkeletonRenderer, recursive_to
@@ -39,23 +39,12 @@ from PIL import Image
 from smplx.utils import (Array, MANOOutput, SMPLHOutput, SMPLOutput,
                          SMPLXOutput, Struct, Tensor, to_np, to_tensor)
 from tqdm import tqdm
-
-LIGHT_BLUE = (0.65098039, 0.74117647, 0.85882353)
-
-import dataclasses
-import json
-import logging
-from dataclasses import dataclass, field
-from pprint import pprint
-from typing import Dict, List, Optional
-
-import draccus
-import tensorflow as tf
-from draccus.argparsing import ArgumentParser as AP
 from vitpose_model import ViTPoseModel
 
+# from manotorch.manolayer import ManoLayer, MANOOutput
 tf.config.set_visible_devices([], "GPU")
 
+LIGHT_BLUE = (0.65098039, 0.74117647, 0.85882353)
 
 
 def json_response(obj):
@@ -82,9 +71,6 @@ def stack_and_pad(history: deque, num_obs: int):
     return full_obs
 
 
-
-
-
 @dataclass
 class DemoCN:
     """config node for demo"""
@@ -100,17 +86,10 @@ class DemoCN:
     body_detector: str = "vitdet"  # Using regnety improves runtime and reduces memory
     file_type: List[str] = field(default_factory=lambda: ["*.jpg", "*.png"])
 
+    # TODO fix! ... such a mess
+    port: int = 8002  # Port to run the server on
+    host: str = "0.0.0.0"  # Host to run the server on
 
-def get_config() -> DemoCN:
-    return AP(config_class=DemoCN).parse_args()
-
-
-args = get_config()
-
-
-import logging
-
-from colorama import Fore, Style, init
 
 # Initialize colorama
 init(autoreset=True)
@@ -164,7 +143,9 @@ class Logger:
 logger = Logger().get_logger()
 
 
-def infer(i, img, detector, vitpose, device, model, model_cfg, renderer: Renderer):
+def infer(
+    i, img, detector, vitpose, device, model, model_cfg, renderer: Renderer, args
+):
 
     print()
     img_path = f"{i}.jpg"
@@ -244,10 +225,11 @@ def infer(i, img, detector, vitpose, device, model, model_cfg, renderer: Rendere
         model,
         renderer,
         img_path,
+        args,
     )
 
     print(OUT.keys)
-    return OUT # , front
+    return OUT  # , front
 
 
 def load_and_preprocess_image(img_path):
@@ -326,7 +308,15 @@ class Store:
 
 
 def run_hand_reconstruction(
-    model_cfg, img_cv2, bboxes, is_right, device, model, renderer: Renderer, img_path
+    model_cfg,
+    img_cv2,
+    bboxes,
+    is_right,
+    device,
+    model,
+    renderer: Renderer,
+    img_path,
+    args,
 ):
     """predict mano hand mesh on one image from coarse cropped hand bbox"""
 
@@ -411,12 +401,14 @@ def run_hand_reconstruction(
             }
         )
 
-        render_hand_view(renderer, batch, out, pred_cam_t_full, img_size, img_path, S)
+        render_hand_view(
+            renderer, batch, out, pred_cam_t_full, img_size, img_path, S, args
+        )
 
     # THIS IS THE IMPORTANT PART
     if args.full_frame and len(S.verts) > 0:
         front = render_front_view(
-            S, renderer, img_size, img_cv2, img_path, scaled_focal_length
+            S, renderer, img_size, img_cv2, img_path, scaled_focal_length, args
         )
 
     return OUT, front
@@ -446,7 +438,7 @@ def process_batch(batch, out, model_cfg):
 
 
 def render_hand_view(
-    renderer: Renderer, batch, out, pred_cam_t_full, img_size, img_path, S: Store
+    renderer: Renderer, batch, out, pred_cam_t_full, img_size, img_path, S: Store, args
 ):
     """render hand view and save mesh if needed"""
 
@@ -504,7 +496,13 @@ def save_mesh(verts, cam_t, renderer: Renderer, is_right, mpath):
 
 
 def render_front_view(
-    S: Store, renderer: Renderer, img_size, img_cv2, img_path, scaled_focal_length
+    S: Store,
+    renderer: Renderer,
+    img_size,
+    img_cv2,
+    img_path,
+    scaled_focal_length,
+    args,
 ):
     misc_args = dict(
         mesh_base_color=LIGHT_BLUE,
@@ -567,7 +565,7 @@ def init_regnety():
     return detector
 
 
-def init_detector():
+def init_detector(args):
     if args.body_detector == "vitdet":
         return init_vitdet()
     elif args.body_detector == "regnety":
@@ -669,8 +667,9 @@ def flatten(d, parent_key="", sep="."):
     return dict(items)
 
 
-def main():
-    args = get_config()
+@draccus.wrap()
+def main(cfg: DemoCN):
+    args = cfg
     pprint(args)
 
     # Download and load checkpoints
