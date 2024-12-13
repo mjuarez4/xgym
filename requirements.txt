@@ -6,3 +6,10 @@ opencv-python
 pyrealsense2
 # envlogger[tfds]
 # bsuite
+
+uvicorn
+fastapi
+colorama
+webdataset 
+# TODO remove webdataset wds as dependency
+# hamer uses for script preprocessing

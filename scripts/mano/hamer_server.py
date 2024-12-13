@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pprint import pprint
 from typing import Any, Dict, List
 
+import os
 import cv2
 import jax
 import numpy as np
@@ -23,9 +24,10 @@ from hamer.models import (DEFAULT_CHECKPOINT, HAMER, MANO, download_models,
 from hamer.utils import SkeletonRenderer, recursive_to
 from hamer.utils.renderer import Renderer, cam_crop_to_full
 from jax import numpy as jnp
-from util import args, infer, init_detector, resize, stack_and_pad
+from util import infer, init_detector, resize, stack_and_pad
 from vitpose_model import ViTPoseModel
 
+import xgym
 
 def json_response(obj):
     return JSONResponse(jax.tree.map(json_numpy.dumps, obj))
@@ -69,6 +71,7 @@ class DemoCN:
     # TODO fix!
     port: int = 8002  # Port to run the server on
     host: str = "0.0.0.0"  # Host to run the server on
+    device: int = 0  # Cuda device to run the server on
 
 
 def flatten(d, parent_key="", sep="."):
@@ -180,6 +183,12 @@ import draccus
 
 @draccus.wrap()
 def main(cfg: DemoCN):
+
+    xgym.logger.info("Starting server")
+    xgym.logger.info(f'using device: GPU{cfg.device}')
+    xgym.logger.info(f"Running on {cfg.host}:{cfg.port}")
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.device)
 
     tf.config.set_visible_devices([], "GPU")
     server = HttpServer(cfg)

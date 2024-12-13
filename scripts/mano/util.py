@@ -40,6 +40,7 @@ from smplx.utils import (Array, MANOOutput, SMPLHOutput, SMPLOutput,
                          SMPLXOutput, Struct, Tensor, to_np, to_tensor)
 from tqdm import tqdm
 from vitpose_model import ViTPoseModel
+import torch
 
 # from manotorch.manolayer import ManoLayer, MANOOutput
 tf.config.set_visible_devices([], "GPU")
@@ -536,6 +537,14 @@ def render_front_view(
 
 
 def init_vitdet():
+    """
+    Initialize the ViTDet model with a pretrained checkpoint.
+    TODO fix download of model_final_f05665.pkl from hub
+
+    in $HOME / 
+    .torch/iopath_cache/detectron2/ViTDet/COCO/cascade_mask_rcnn_vitdet_h/f328730692/model_final_f05665.pkl
+    """
+
     import hamer
     from detectron2.config import LazyConfig
     from hamer.utils.utils_detectron2 import DefaultPredictor_Lazy
@@ -574,7 +583,6 @@ def init_detector(args):
         raise ValueError(f"Unknown body detector: {args.body_detector}")
 
 
-import torch
 
 
 def cam_full_to_crop(cam_full, box, img_size, focal_length=5000.0):
