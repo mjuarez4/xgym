@@ -1,6 +1,8 @@
 from xgym import utils
 from xgym.utils import logger
 
+logger.info("Setting up xgym")
+
 from pathlib import Path
 
 BASE = Path(__file__).parent.parent
