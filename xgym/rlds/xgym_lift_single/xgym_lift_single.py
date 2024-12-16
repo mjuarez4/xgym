@@ -10,7 +10,7 @@ import tensorflow_datasets as tfds
 class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for LUC XGym Single Arm"""
 
-    VERSION = tfds.core.Version("3.0.1")
+    VERSION = tfds.core.Version("3.0.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.0.1": "Non blocking at 5hz... 3 world cams",
