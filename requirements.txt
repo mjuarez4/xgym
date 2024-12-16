@@ -8,6 +8,11 @@ draccus
 jax
 matplotlib
 tensorflow
+pynput
+imageio
+json-numpy
+pyspacemouse
+pygame
 
 # envlogger[tfds]
 # bsuite
