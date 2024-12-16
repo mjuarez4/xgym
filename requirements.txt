@@ -4,6 +4,12 @@ gymnasium
 numpy
 opencv-python
 pyrealsense2
-envlogger[tfds]
-bsuite
+# envlogger[tfds]
+# bsuite
 
+uvicorn
+fastapi
+colorama
+webdataset 
+# TODO remove webdataset wds as dependency
+# hamer uses for script preprocessing

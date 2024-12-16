@@ -5,16 +5,29 @@ import time
 import traceback
 from collections import deque
 from dataclasses import dataclass, field
+from pprint import pprint
 from typing import Any, Dict, List
 
+import os
 import cv2
+import jax
 import numpy as np
 import tensorflow as tf
+import torch
 import uvicorn
+from draccus.argparsing import ArgumentParser as AP
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from hamer.configs import CACHE_DIR_HAMER
+from hamer.models import (DEFAULT_CHECKPOINT, HAMER, MANO, download_models,
+                          load_hamer)
+from hamer.utils import SkeletonRenderer, recursive_to
+from hamer.utils.renderer import Renderer, cam_crop_to_full
 from jax import numpy as jnp
+from util import infer, init_detector, resize, stack_and_pad
+from vitpose_model import ViTPoseModel
 
+import xgym
 
 def json_response(obj):
     return JSONResponse(jax.tree.map(json_numpy.dumps, obj))
@@ -40,14 +53,6 @@ def stack_and_pad(history: deque, num_obs: int):
     return full_obs
 
 
-from pprint import pprint
-
-from draccus.argparsing import ArgumentParser as AP
-from hamer.configs import CACHE_DIR_HAMER
-from hamer.models import (DEFAULT_CHECKPOINT, HAMER, MANO, download_models,
-                          load_hamer)
-
-
 @dataclass
 class DemoCN:
     """config node for demo"""
@@ -63,20 +68,10 @@ class DemoCN:
     body_detector: str = "vitdet"  # Using regnety improves runtime and reduces memory
     file_type: List[str] = field(default_factory=lambda: ["*.jpg", "*.png"])
 
-
-def get_config() -> DemoCN:
-    return AP(config_class=DemoCN).parse_args()
-
-
-args = get_config()
-
-
-import jax
-import torch
-from hamer.utils import SkeletonRenderer, recursive_to
-from hamer.utils.renderer import Renderer, cam_crop_to_full
-from util import infer, init_detector, resize, stack_and_pad
-from vitpose_model import ViTPoseModel
+    # TODO fix!
+    port: int = 8002  # Port to run the server on
+    host: str = "0.0.0.0"  # Host to run the server on
+    device: int = 0  # Cuda device to run the server on
 
 
 def flatten(d, parent_key="", sep="."):
@@ -104,11 +99,12 @@ def unnormalize(img):
 
 class HttpServer:
 
-    def __init__(self):
+    def __init__(self, cfg):
 
+        self.cfg = cfg
         # Download and load checkpoints
         download_models(CACHE_DIR_HAMER)
-        self.model, self.model_cfg = load_hamer(args.checkpoint)
+        self.model, self.model_cfg = load_hamer(cfg.checkpoint)
 
         pprint(self.model_cfg)
 
@@ -119,7 +115,7 @@ class HttpServer:
         self.model = self.model.to(self.device)
         self.model.eval()
 
-        self.detector = init_detector()  # Load detector
+        self.detector = init_detector(cfg)  # Load detector
         self.vitpose = ViTPoseModel(self.device)  # keypoint detector
         self.renderer = Renderer(
             self.model_cfg, faces=self.model.mano.faces
@@ -154,6 +150,7 @@ class HttpServer:
                 model=self.model,
                 model_cfg=self.model_cfg,
                 renderer=self.renderer,
+                args=self.cfg,
             )
 
             # everything is wrapped in list
@@ -181,18 +178,21 @@ class HttpServer:
             return "error"
 
 
-def main():
-    import argparse
+import draccus
+
+
+@draccus.wrap()
+def main(cfg: DemoCN):
+
+    xgym.logger.info("Starting server")
+    xgym.logger.info(f'using device: GPU{cfg.device}')
+    xgym.logger.info(f"Running on {cfg.host}:{cfg.port}")
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.device)
 
     tf.config.set_visible_devices([], "GPU")
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--host", help="Host to run on", default="0.0.0.0", type=str)
-    parser.add_argument("--port", help="Port to run on", default=8001, type=int)
-    args = parser.parse_args()
-
-    server = HttpServer()
-    server.run(args.port, args.host)
+    server = HttpServer(cfg)
+    server.run(cfg.port, cfg.host)
 
 
 if __name__ == "__main__":
