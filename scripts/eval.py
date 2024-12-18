@@ -26,19 +26,31 @@ from xgym.utils import camera as cu
 from xgym.utils.boundary import PartialRobotState as RS
 
 
+import draccus
+
 @dataclass
 class RunCFG:
 
     base_dir: str = osp.expanduser("~/data")
     time: str = time.strftime("%Y%m%d-%H%M%S")
-    env_name: str = f"xgym-liftmodel-v0-{time}"
-    data_dir: str = osp.join(base_dir, env_name)
+    task: str = ""
+    ensemble: bool = True
+    nsteps: int = 100
+
+    def __post_init__(self):
+        self.check()
+
+        self.env_name: str = f"xgym-eval-{self.task}-{self.time}"
+        self.data_dir: str = osp.join(self.base_dir, self.env_name)
+
+    def check(self):
+        assert self.task, "Please specify a task"
 
 
-cfg = RunCFG()
+@draccus.wrap()
+def main(cfg: RunCFG):
 
-
-def main():
+    print(cfg)
 
     os.makedirs(cfg.data_dir, exist_ok=True)
 
@@ -46,19 +58,14 @@ def main():
     model = ModelController(
         "carina.cs.luc.edu",
         8001,
-        ensemble=False,
-        task="stack",
+        ensemble=cfg.ensemble,
+        task=cfg.task,
     )
 
-    # env: Base = gym.make("luc-base")
-
-    #model = ModelController("carina.cs.luc.edu", 8001, ensemble=True)
-    model = ModelController("aisec-102.cs.luc.edu", 8001, ensemble=True)
-    #model = ModelController("dijkstra.cs.luc.edu", 8001, ensemble=True)
     model.reset()
 
     # env = gym.make("xgym/stack-v0")
-    env = Lift(out_dir=cfg.data_dir, random=True)
+    env = Lift(out_dir=cfg.data_dir, random=False)
     env.logger.warning(model.tasks[model.task])
 
     # ds = tfds.load("xgym_lift_single", split="train")
@@ -74,7 +81,7 @@ def main():
 
         # timestep = env.reset()
         # obs = timestep.observation
-        for _ in tqdm(range(75), desc=f"EP{ep}"):  # 3 episodes
+        for _ in tqdm(range(cfg.nsteps), desc=f"EP{ep}"):  # 3 episodes
 
             tic = time.time()
             print("\n" * 3)
@@ -93,7 +100,9 @@ def main():
             cv2.waitKey(1)  # 1 ms delay to allow for rendering
 
             proprio = obs["robot"]["position"]
-            proprio = np.array(proprio)
+            proprio = np.array(proprio).astype(np.float64)
+
+            # TODO the datasets should be fixed to regular proprio vals in mm and 0-1
             proprio[:3] = proprio[:3] / 1e3
             proprio[-1] = proprio[-1] / env.GRIPPER_MAX
 
@@ -102,7 +111,7 @@ def main():
                 high=obs["img"]["overhead"],
                 wrist=obs["img"]["wrist"],
                 side=obs["img"]["side"],
-                # proprio=proprio.tolist(),
+                # proprio=proprio,
             ).copy()
 
             print(actions.round(3))
@@ -110,6 +119,8 @@ def main():
 
                 action[:3] *= int(1e3)
                 print(action.shape)
+                # action[3:6] = action[3:6].clip(-0.25,0.25)
+                # input("Press Enter to continue...")
                 action[-1] *= 0.8 if action[-1] < 0.5 else 1
                 # action[-1] *= 0 if action[-1] < 0.2 else 1
                 # action[-1] = 1 if action[-1] > 0.8 else action[-1]
@@ -117,12 +128,12 @@ def main():
                 print(f"action: {[round(x,4) for x in action.tolist()]}")
 
                 obs, reward, done, info = env.step(action)
-                time.sleep(dt)
+                # time.sleep(dt)
 
-                # toc = time.time()
-                # elapsed = toc - tic
-                # time.sleep(max(0, dt - elapsed))  # 5hz
-                # tic = time.time() if a else tic
+                toc = time.time()
+                elapsed = toc - tic
+                time.sleep(max(0, dt - elapsed))  # 5hz
+                tic = time.time() if a else tic
 
                 print(f"done: {done}")
                 if done:

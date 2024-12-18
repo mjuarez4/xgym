@@ -12,8 +12,8 @@ import numpy as np
 import requests
 
 
-class ModelController():
-    def __init__(self, ip, port, ensemble=True, task="lift"):
+class ModelController:
+    def __init__(self, ip, port, task, ensemble=True):
         self.server = ip
         self.port = port
         self.url_query = f"http://{self.server}:{self.port}/query"
@@ -66,7 +66,11 @@ class ModelController():
         # pprint(spec(payload))
         # quit()
 
+        payload = jax.tree.map(
+            lambda x: x.tolist() if isinstance(x, np.ndarray) else x, payload
+        )
         out = self.send_observation_and_get_action(payload)
+        out = np.array([out]) if self.ensemble else out
         return out
 
     def send_observation_and_get_action(self, payload):
@@ -98,9 +102,15 @@ class ModelController():
         return response.text
 
 
+import traceback
+
+import xgym
+
+
 class HamerController:
     def __init__(self, ip, port):
         self.server = ip
+        self.host = ip
         self.port = port
         self.url_query = f"http://{self.server}:{self.port}/query"
         self.url_reset = f"http://{self.server}:{self.port}/reset"
@@ -113,7 +123,14 @@ class HamerController:
         # pprint(spec(payload))
         # payload = jp.dumps(payload)
 
-        out = self.send_observation_and_get_action(payload)
+        for r in range(3):
+            out = self.send_observation_and_get_action(payload)
+            if out != "error" and out != {}:
+                break
+
+        if out == "error" or out == {}:
+            xgym.logger.warn(f"Request failed: {self.host}:{self.port}")
+
         return out
 
     def send_observation_and_get_action(self, payload):
@@ -127,13 +144,17 @@ class HamerController:
             response.raise_for_status()
 
             out = jax.tree.map(jp.loads, response.text)
+            if out == "error":
+                return out
             out = jax.tree.map(jp.loads, out)
 
             if not isinstance(out, dict):
                 raise ValueError(f"We have a problem")
             return out
         except Exception as e:
-            print(f"Request failed: {e}")
+            xgym.logger.warn(f"Request failed: {self.host}:{self.port}")
+            traceback.print_exc()
+            # print(f"Request failed: {e}")
             return {}
 
     def reset(self):

@@ -62,6 +62,10 @@ def main(cfg: RunCFG):
     for k, cam in cams.items():
         print(f"Camera {k}: {cam.get(cv2.CAP_PROP_FPS)} FPS")
 
+    for i in range(10):
+        print(f'Starting in {10-i}...')
+        time.sleep(1)
+
     fps = 30
     dt = 1 / fps
 

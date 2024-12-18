@@ -6,17 +6,10 @@ from dataclasses import dataclass, field
 
 import cv2
 import draccus
-import envlogger
 import gymnasium as gym
 import jax
 import matplotlib.pyplot as plt
 import numpy as np
-import tensorflow as tf
-import tensorflow_datasets as tfds
-from bsuite.utils.gym_wrapper import DMEnvFromGym, GymFromDMEnv
-from envlogger.backends.tfds_backend_writer import \
-    TFDSBackendWriter as TFDSWriter
-from envlogger.testing import catch_env
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from pynput import keyboard
 from tqdm import tqdm
@@ -38,7 +31,9 @@ class RunCFG:
     time: str = time.strftime("%Y%m%d-%H%M%S")
     env_name: str = f"xgym-sandbox-{task}-v0-{time}"
     data_dir: str = osp.join(base_dir, env_name)
-    nsteps: int = 100 #added steps for bean  pour
+
+    nsteps: int = 30 
+    nepisodes: int = 100
 
 
 
@@ -78,16 +73,14 @@ def main(cfg: RunCFG):
     agent = SpaceMouseController()
 
     # env = gym.make("xgym/stack-v0")
-    env = Lift(out_dir=cfg.data_dir, random=False)
-
-    # ds = tfds.load("xgym_lift_single", split="train")
+    env = Lift(out_dir=cfg.data_dir, random=True)
 
     freq = 10  # hz
     dt = 1 / freq
 
     hist = np.zeros(7)
 
-    for ep in tqdm(range(100), desc="Episodes"):
+    for ep in tqdm(cfg.nepisodes, desc="Episodes"):
 
         obs = env.reset()
         env.set_mode(7)

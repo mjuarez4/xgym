@@ -187,7 +187,7 @@ class Base(gym.Env):
         self.boundary = bd.AND(
             [
                 bd.CartesianBoundary(
-                    min=RS(cartesian=[150, -350, 55]), # 5mm safety margin
+                    min=RS(cartesian=[150, -350, 55]),  # 5mm safety margin
                     max=RS(cartesian=[800, 350, 800]),
                 ),
                 # bd.AngularBoundary(
@@ -258,9 +258,9 @@ class Base(gym.Env):
         # must be manually verified if changed
         self.cams = {
             "worm": self.cams[0],
-            'overhead': self.cams[2],
-            'side': self.cams[10],
-            }
+            "overhead": self.cams[2],
+            "side": self.cams[10],
+        }
 
         print(self.cams)
 
@@ -492,6 +492,8 @@ class Base(gym.Env):
                 pitch=act.aa[1] + pos.aa[1],
                 yaw=act.aa[2] + pos.aa[2],
                 relative=False,
+                # speed=100 is default,
+                mvacc=1500, # 2000 appears to be default for cartesian
                 wait=wait,
             )
 
@@ -557,24 +559,25 @@ class Base(gym.Env):
     def safety_check(self, action):
 
         # self.safety_torque_limit()
+        # logger.debug(self.position)
 
-        logger.debug(self.position)
         act = RS.from_vector(action)
         new = self.position + act
         new.gripper = act.gripper
-        logger.warn(self.boundary.contains(new))
 
-        logger.warn(f"{self.position.aa}+{act.aa}={new.aa}")
+        # logger.warn(self.boundary.contains(new))
+        # logger.warn(f"{self.position.aa}+{act.aa}={new.aa}")
 
         if not self.boundary.contains(new):
             try:
                 _clipped = self.boundary.clip(new)
                 clipped = _clipped - self.position
                 clipped.gripper = _clipped.gripper
-                logger.warn(f"clipping action: {action} to {clipped}")
+                logger.warn(f"clipping action: A to B")
+                logger.warn(f"{action.round(4)}") # just np
+                logger.warn(f"{clipped.to_vector().round(4)}")
 
-                logger.info(self.boundary.contains(self.position + clipped))
-
+                # logger.info(self.boundary.contains(self.position + clipped))
                 # input("safety: Press Enter to continue...")
                 return clipped.to_vector()
             except Exception as e:
