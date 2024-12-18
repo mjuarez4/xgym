@@ -13,6 +13,8 @@ imageio
 json-numpy
 pyspacemouse
 pygame
+mlcroissant
+
 
 # envlogger[tfds]
 # bsuite
