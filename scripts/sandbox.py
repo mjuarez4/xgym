@@ -31,7 +31,9 @@ class RunCFG:
     time: str = time.strftime("%Y%m%d-%H%M%S")
     env_name: str = f"xgym-sandbox-{task}-v0-{time}"
     data_dir: str = osp.join(base_dir, env_name)
+
     nsteps: int = 30 
+    nepisodes: int = 100
 
 
 
@@ -78,7 +80,7 @@ def main(cfg: RunCFG):
 
     hist = np.zeros(7)
 
-    for ep in tqdm(range(100), desc="Episodes"):
+    for ep in tqdm(cfg.nepisodes, desc="Episodes"):
 
         obs = env.reset()
         env.set_mode(7)
