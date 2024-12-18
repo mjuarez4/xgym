@@ -82,7 +82,7 @@ class Lift(Base):
                 ]
             )
 
-            if np.random.rand() < 0.75:
+            if np.random.rand() < 0.5:
                 self._step(step)
 
         return self.observation()
