@@ -28,7 +28,7 @@ from draccus.argparsing import ArgumentParser as AP
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from hamer.configs import CACHE_DIR_HAMER
-from hamer.datasets.vitdet_dataset import DEFAULT_MEAN, DEFAULT_STD
+from hamer.datasets.vitdet_dataset import DEFAULT_MEAN, DEFAULT_STD,ViTDetDataset
 from hamer.models import (DEFAULT_CHECKPOINT, HAMER, MANO, download_models,
                           load_hamer)
 from hamer.utils import SkeletonRenderer, recursive_to

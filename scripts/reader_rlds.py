@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import xgym
 from pprint import pprint
 import draccus
 from typing import Union
@@ -17,8 +18,9 @@ import enum
 
 class Task(enum.Enum):
     LIFT = "lift"
+    STACK = "stack"
     DUCK = "duck"
-    STACK = 'stack'
+    POUR = "pour"
 
 class Embodiment(enum.Enum):
     SINGLE = "single"
@@ -34,6 +36,9 @@ class BaseReaderConfig:
     visualize: bool = True
 
     use_palm: bool = False
+    wait: int = 50
+    horizon: int = 10
+    resolution: int = 3
 
     def __post_init__(self):
         for k, v in self.__dict__.items():
@@ -41,39 +46,51 @@ class BaseReaderConfig:
                 setattr(self, k, v.value)
 
 
+def recolor(img):
+    return cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
 @draccus.wrap()
 def main(cfg: BaseReaderConfig):
     pprint(cfg)
 
     name = f"xgym_{cfg.task}_{cfg.embodiment}{cfg.version}"
-    print(f"Loading {name} dataset")
+    xgym.logger.info(f"Loading {name} dataset")
     ds = tfds.load(name)["train"]
+    xgym.logger.info(len(ds))
+
     # ds = ds.repeat(100)
 
     def imshow(*args):
         if cfg.visualize:
             cv2.imshow(*args)
 
-    for ep in ds:
+    def ifprint(x):
+        if cfg.verbose:
+            print(x)
+
+
+    for ep in tqdm(ds,total=len(ds)):
         steps = [x for x in ep["steps"]]
-        for i, s in tqdm(enumerate(steps)):
+
+        for i, s in tqdm(enumerate(steps), total=len(steps), leave=False):
 
             if cfg.verbose:
-                print(s.keys())
+                ifprint(s.keys())
 
             if cfg.embodiment == "single":
                 action = np.array(s["action"]).tolist()
                 action = np.array([round(a, 4) for a in action])
-                print(action)
+                ifprint(action)
                 img = np.concatenate(list(s["observation"]["image"].values()), axis=1)
+                cv2.imshow("image", recolor(img))
             else:
                 try:
                     img = np.array(s["observation"]["img"])
                 except KeyError:
                     img = np.array(s["observation"]["frame"])
 
-                print(steps[i]['observation']['keypoints_3d'])
-                for j in range(4):
+                ifprint(steps[i]['observation']['keypoints_3d'])
+                for j in range(0,cfg.horizon,cfg.resolution):
                     try:
 
                         points2d = add_col(
@@ -81,23 +98,24 @@ def main(cfg: BaseReaderConfig):
                         )
                         palm = points2d[0]
 
+                        ifprint(img.mean(0).mean(0))
+
                         if cfg.use_palm:
                             # z = np.array(steps[i + j]["observation"]["keypoints_3d"])[0][2]
                             img = overlay_palm(img, int(palm[0]), int(palm[1]), opacity=j)
                         else:
                             img = overlay_pose(img, points2d, opacity=j)
-                        # print(palm)
+                        # ifprint(palm)
 
                         wrist = np.array(s["observation"]["img_wrist"])
-                        imshow("wrist", cv2.cvtColor(wrist, cv2.COLOR_RGB2BGR))
+                        cv2.imshow("wrist", cv2.resize(recolor(wrist), (640, 640)))
 
                     except (IndexError, KeyError) as e:
                         pass
-                        # print(e)
+                        # ifprint(e)
+                cv2.imshow("image", cv2.resize(recolor(img), (640, 640)))
 
-
-            imshow("image", cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
-            cv2.waitKey(50)
+            cv2.waitKey(cfg.wait)
 
         print()
 

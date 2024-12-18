@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
+
 from xgym import MANO_1, MANO_1DONE, MANO_2, MANO_4
 from xgym.model_controllers import HamerController
 from xgym.rlds.util import (add_col, apply_persp, apply_uv, apply_xyz,
@@ -163,11 +164,38 @@ def solve_2d(out: dict):
     return out
 
 
-def main():
+from dataclasses import dataclass, field
+from typing import Union
 
-    hamer = HamerController("aisec-102.cs.luc.edu", 8001)
+import draccus
+
+
+@dataclass
+class ServerCN:
+    host: str
+    port: int
+
+
+@dataclass
+class MultiServerCN:
+    # csv
+    servers: Union[str, list[str]] = field(default_factory=lambda: [])
+
+    def __post_init__(self):
+        if isinstance(self.servers, str):
+            self.servers = [s.split(":") for s in self.servers.split(",")]
+            self.servers = [ServerCN(host=h, port=int(p)) for h, p in self.servers]
+
+
+@draccus.wrap()
+def main(cfg: MultiServerCN):
+
+    servers = cfg.servers
+    servers = [HamerController(s.host, s.port) for s in servers]
+
     # hamer = HamerController("0.0.0.0", 8001)
     files = list(MANO_1.glob("*.npz"))
+    # files = [f for f in files if "stack" in f.name or "duck" in f.name]
 
     for path in tqdm(files, leave=False):
         print(f"Processing video: {path.name}")
@@ -175,24 +203,38 @@ def main():
         data = np.load(path)
         data = {k: data[k] for k in data.files}
 
-        for k, v in tqdm(data.items(), leave=False):  # for each view in the episode
+        # must use cam_k since k is disposable the videos overwrite each other
+        for cam_k, v in tqdm(data.items(), leave=False):  # for each view in the episode
             outs = []
-            for i, frame in tqdm(enumerate(v), total=len(v)):
 
-                out = hamer(frame)
+            # used before concurrent
+            # for i, frame in tqdm(enumerate(v), total=len(v)):
+
+            def process(frame, myserver):
+                out = myserver(frame)
                 try:
                     # patch because img is the only one with no batch dim
                     out["img"] = out["img"][None]
-                except: # hamer failed ie: person not in frame
-                    continue
+                except:  # hamer failed ie: person not in frame
+                    return
 
                 out = remap_keys(out)
+                return out
+
+            from concurrent.futures import ThreadPoolExecutor
+            servergen = (servers[i % len(servers)] for i in range(len(v)))
+
+            # requests might be queued
+            with ThreadPoolExecutor(max_workers=len(servers)) as ex:
+                # v is list of frames
+                results = list(tqdm(ex.map(process, v, servergen), total=len(v)))
+
+            for out in results:
                 if out is None or out == {}:
                     continue
-
                 outs.append(out)
 
-            if len(outs) == 0: # hamer failed for all frames?
+            if len(outs) == 0:  # hamer failed for all frames?
                 continue
             outs, ok = postprocess_sequence(outs)
             if not ok:
@@ -208,8 +250,8 @@ def main():
                 step = solve_2d(step)
 
                 bgr2rgb = lambda x: cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
-                step['img'] = bgr2rgb(step['img'])
-                step['img_wrist'] = bgr2rgb(step['img_wrist'])
+                step["img"] = bgr2rgb(step["img"])
+                step["img_wrist"] = bgr2rgb(step["img_wrist"])
 
                 for k, v in step.items():
                     outs[k][i] = v  # save back to the original dict
@@ -225,9 +267,9 @@ def main():
             cv2.waitKey(0)
             """
 
-            np.savez(MANO_4 / f"{path.stem}_{k}_filtered.npz", **outs)
+            np.savez(MANO_4 / f"{path.stem}_{cam_k}_filtered.npz", **outs)
 
-        # shutil.move(str(path), MANO_1DONE / path.name)
+        shutil.move(str(path), MANO_1DONE / path.name)
 
 
 if __name__ == "__main__":

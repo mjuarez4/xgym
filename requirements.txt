@@ -4,6 +4,18 @@ gymnasium
 numpy
 opencv-python
 pyrealsense2
+draccus
+jax
+matplotlib
+tensorflow
+pynput
+imageio
+json-numpy
+pyspacemouse
+pygame
+mlcroissant
+
+
 # envlogger[tfds]
 # bsuite
 
