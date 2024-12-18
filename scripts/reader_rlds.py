@@ -18,6 +18,7 @@ import enum
 class Task(enum.Enum):
     LIFT = "lift"
     DUCK = "duck"
+    STACK = 'stack'
 
 class Embodiment(enum.Enum):
     SINGLE = "single"
@@ -49,6 +50,10 @@ def main(cfg: BaseReaderConfig):
     ds = tfds.load(name)["train"]
     # ds = ds.repeat(100)
 
+    def imshow(*args):
+        if cfg.visualize:
+            cv2.imshow(*args)
+
     for ep in ds:
         steps = [x for x in ep["steps"]]
         for i, s in tqdm(enumerate(steps)):
@@ -67,6 +72,7 @@ def main(cfg: BaseReaderConfig):
                 except KeyError:
                     img = np.array(s["observation"]["frame"])
 
+                print(steps[i]['observation']['keypoints_3d'])
                 for j in range(4):
                     try:
 
@@ -80,17 +86,17 @@ def main(cfg: BaseReaderConfig):
                             img = overlay_palm(img, int(palm[0]), int(palm[1]), opacity=j)
                         else:
                             img = overlay_pose(img, points2d, opacity=j)
-                        print(palm)
+                        # print(palm)
 
                         wrist = np.array(s["observation"]["img_wrist"])
-                        cv2.imshow("wrist", cv2.cvtColor(wrist, cv2.COLOR_RGB2BGR))
+                        imshow("wrist", cv2.cvtColor(wrist, cv2.COLOR_RGB2BGR))
 
                     except (IndexError, KeyError) as e:
                         pass
                         # print(e)
 
 
-            cv2.imshow("image", cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+            imshow("image", cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
             cv2.waitKey(50)
 
         print()
