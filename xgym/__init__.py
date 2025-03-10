@@ -1,5 +1,7 @@
 from xgym import utils
 from xgym.utils import logger
+from xgym import nodes
+from xgym import viz
 
 logger.info("Setting up xgym")
 
