@@ -1,4 +1,6 @@
 import abc
+from xgym.rlds.util.trajectory import scan_noop
+import jax.numpy as jnp
 from abc import ABC
 from pathlib import Path
 from pprint import pprint
@@ -8,6 +10,9 @@ import jax
 import numpy as np
 import tensorflow_datasets as tfds
 import xgym
+
+from xgym.rlds.util.trajectory import binarize_gripper_actions as binarize
+from functools import partial
 
 
 class TFDSBaseMano(tfds.core.GeneratorBasedBuilder, ABC):
@@ -182,7 +187,7 @@ class TFDSBaseMano(tfds.core.GeneratorBasedBuilder, ABC):
         """Converts Union[RGB,BGR] to RGB images."""
 
         video = ep["img_wrist"]
-        channels = np.median(video, axis=(0,1, 2))
+        channels = np.median(video, axis=(0, 1, 2))
         # wchannels = ep["img_wrist"].mean(-2).mean(-2).mean(0)
         flipc = channels[0] < channels[-1]
         # print(channels)
@@ -255,6 +260,188 @@ class TFDSBaseMano(tfds.core.GeneratorBasedBuilder, ABC):
 
         for idx, ep in enumerate(ds):
             yield _parse_example(f"{ep}_{idx}", ep)
+
+        # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
+        # beam = tfds.core.lazy_imports.apache_beam
+        # return beam.Create(ds) | beam.Map(_parse_example)
+
+
+class XgymSingle(tfds.core.GeneratorBasedBuilder):
+    """DatasetBuilder Base for LUC XGym"""
+
+    # VERSION = tfds.core.Version("3.0.0")
+    RELEASE_NOTES = {
+        "1.0.0": "Initial release.",
+        "2.0.0": "more data and overhead cam",
+        "3.0.0": "relocated setup",
+        "4.0.0": "50hz data",
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _info(self) -> tfds.core.DatasetInfo:
+        """Dataset metadata (homepage, citation,...)."""
+
+        def feat_im(doc):
+            return tfds.features.Image(
+                shape=(224, 224, 3),
+                dtype=np.uint8,
+                encoding_format="png",
+                doc=doc,
+            )
+
+        return self.dataset_info_from_configs(
+            features=tfds.features.FeaturesDict(
+                {
+                    "steps": tfds.features.Dataset(
+                        {
+                            "observation": tfds.features.FeaturesDict(
+                                {
+                                    "image": tfds.features.FeaturesDict(
+                                        {
+                                            "worm": feat_im(
+                                                doc="Low front logitech camera RGB observation."
+                                            ),
+                                            "side": feat_im(
+                                                doc="Low side view logitech camera RGB observation."
+                                            ),
+                                            "overhead": feat_im(
+                                                doc="Overhead logitech camera RGB observation."
+                                            ),
+                                            "wrist": feat_im(
+                                                doc="Wrist realsense camera RGB observation."
+                                            ),
+                                        }
+                                    ),
+                                    "proprio": tfds.features.FeaturesDict(
+                                        {
+                                            "joints": tfds.features.Tensor(
+                                                shape=[7],
+                                                dtype=np.float32,
+                                                doc="Joint angles. radians",
+                                            ),
+                                            "position": tfds.features.Tensor(
+                                                shape=[7],
+                                                dtype=np.float32,
+                                                doc="Joint positions. xyz millimeters (mm) and rpy",
+                                            ),
+                                        }
+                                    ),
+                                }
+                            ),
+                            "action": tfds.features.Tensor(
+                                # do we need 8? for terminate episode action?
+                                shape=(7,),
+                                dtype=np.float32,
+                                doc="Robot action, consists of [xyz,rpy,gripper].",
+                            ),
+                            "discount": tfds.features.Scalar(
+                                dtype=np.float32,
+                                doc="Discount if provided, default to 1.",
+                            ),
+                            "reward": tfds.features.Scalar(
+                                dtype=np.float32,
+                                doc="Reward if provided, 1 on final step for demos.",
+                            ),
+                            "is_first": tfds.features.Scalar(
+                                dtype=np.bool_, doc="True on first step of the episode."
+                            ),
+                            "is_last": tfds.features.Scalar(
+                                dtype=np.bool_, doc="True on last step of the episode."
+                            ),
+                            "is_terminal": tfds.features.Scalar(
+                                dtype=np.bool_,
+                                doc="True on last step of the episode if it is a terminal step, True for demos.",
+                            ),
+                            "language_instruction": tfds.features.Text(
+                                doc="Language Instruction."
+                            ),
+                            "language_embedding": tfds.features.Tensor(
+                                shape=(512,),
+                                dtype=np.float32,
+                                doc="Kona language embedding. "
+                                "See https://tfhub.dev/google/universal-sentence-encoder-large/5",
+                            ),
+                        }
+                    ),
+                    "episode_metadata": tfds.features.FeaturesDict({}),
+                }
+            )
+        )
+
+    def _split_generators(self, dl_manager: tfds.download.DownloadManager):
+        """Define data splits."""
+
+        root = Path(f"~/xgym_{self.name}_v{self.VERSION[0]}").expanduser()
+        files = list(root.rglob("*.dat"))
+        return {"train": self._generate_examples(files)}
+
+    def dict_unflatten(self, flat, sep="."):
+        """Unflatten a flat dictionary to a nested dictionary."""
+
+        nest = {}
+        for key, value in flat.items():
+            keys = key.split(sep)
+            d = nest
+            for k in keys[:-1]:
+                if k not in d:
+                    d[k] = {}
+                d = d[k]
+            d[keys[-1]] = value
+        return nest
+
+    def _parse_example(self, path):
+
+        ep = xgym.viz.memmap.read(path) 
+        n = len(ep(ep['time']))
+
+        # spec = lambda arr: jax.tree.map(lambda x: x.shape, arr)
+        # pprint(spec(ep))
+
+        ep['robot']['gripper'] /= 850
+        ep['robot']['pose'][:, :3] /= 1e3
+        binarize = partial(binarize, open=0.95, close=0.4) # doesnt fully close
+        ep['robot']['gripper'] = binarize(ep['robot']['gripper'])
+        pos = np.concatenate(ep["robot"]["pose"], ep["robot"]["gripper"],axis=1)
+
+        noops = np.array(scan_noop(jnp.array(pos),threshold=1e-2))
+        mask = ~noops
+        ep = jax.tree.map(lambda x: x[mask], ep)
+
+        ep['action'] = ep['robot']['pose'][1:] - ep['robot']['pose'][:-1]
+        ep['action'] = jax.tree.map(lambda x: x[1:]-x[:-1], ep['robot']) # pose and joint action
+        ep = ep to [:-1]
+
+        episode =[
+            {
+                "observation": step,
+                "action": act.astype(np.float32),
+                "discount": 1.0,
+                "reward": float(i == (len(ep) - 1)),
+                "is_first": i == 0,
+                "is_last": i == (len(ep) - 1),
+                "is_terminal": i == (len(ep) - 1),
+                "language_instruction": task,
+                "language_embedding": lang,
+            }
+            for i, step in enumerate(ep["time"][:-1])
+        ]
+
+        # if you want to skip an example for whatever reason, simply return None
+        sample = {"steps": episode, "episode_metadata": {}}
+        id = f"{path.parent.name}_{path.stem}"
+        return id, sample
+
+    def _generate_examples(self, ds) -> Iterator[Tuple[str, Any]]:
+        """Generator of examples for each split."""
+
+        self.taskfile = next(Path().cwd().glob("*.npy"))
+        self.task = self.taskfile.stem.replace("_", " ")
+        self.lang = np.load(self.taskfile)
+
+        for path in ds[1:]:
+            yield self._parse_example(path)
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
         # beam = tfds.core.lazy_imports.apache_beam
