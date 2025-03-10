@@ -1,5 +1,4 @@
 import datetime
-from std_msgs.msg import Bool
 import glob
 import time
 from dataclasses import dataclass
@@ -17,7 +16,7 @@ from gello.env import RobotEnv
 from gello.zmq_core.robot_node import ZMQClientRobot
 from geometry_msgs.msg import TwistStamped
 from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Bool, Float32MultiArray
 from xarm_msgs.srv import GetFloat32, GripperMove
 
 from xgym.nodes.base import Base
@@ -37,7 +36,7 @@ def print_color(*args, color=None, attrs=(), **kwargs):
 
 @dataclass
 class GelloArgs:
-    agent: str = "gello" # "none"
+    agent: str = "gello"  # "none"
     robot_port: int = 6001
     wrist_camera_port: int = 5000
     base_camera_port: int = 5001
@@ -55,10 +54,9 @@ class GelloArgs:
     safety: bool = True
 
 
-
 class Gello(Base):
 
-    def __init__(self, args: GelloArgs=GelloArgs(), env=None):
+    def __init__(self, args: GelloArgs = GelloArgs(), env=None):
         super().__init__("gello")
         logger = self.get_logger()
         self.env = env
@@ -100,7 +98,7 @@ class Gello(Base):
                 1.428409457206726,
                 -0.20091573894023895,
                 # 3.42691308
-                3.4
+                3.4,
                 # 0.0 # open
             ],
             "pose": [
@@ -112,7 +110,6 @@ class Gello(Base):
                 0.08958626538515091,
             ],
         }
-
 
         # self.agent._robot.set_torque_mode(True)
         # self.agent._robot.command_joint_state(np.array(self._home["angle"]))
