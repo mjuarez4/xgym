@@ -62,8 +62,8 @@ def read(path):
     )
 
     # TODO add time to the writer schema
-    print(schema)
-    print(dtype)
+    # print(schema)
+    # print(dtype)
 
     ###
     ### read data
@@ -80,7 +80,7 @@ def read(path):
     data = {k: np.array([d[i] for d in data]) for i, k in enumerate(schema.keys())}
     data = {k: np.stack(d).reshape(n, -1) for k, d in data.items()}
 
-    print({k: v.shape for k, v in data.items()})
+    # print({k: v.shape for k, v in data.items()})
 
     data["time"] = data["time"] - data["time"][0]
     for k, values in data.items():

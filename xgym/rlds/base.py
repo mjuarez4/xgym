@@ -1,19 +1,24 @@
 import abc
-from xgym.rlds.util.trajectory import scan_noop
-import jax.numpy as jnp
 from abc import ABC
+from functools import partial
 from pathlib import Path
 from pprint import pprint
 from typing import Any, Dict, Iterator, Tuple
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 import tensorflow_datasets as tfds
+from rich.pretty import pprint
+
 import xgym
-
 from xgym.rlds.util.trajectory import binarize_gripper_actions as binarize
-from functools import partial
+from xgym.rlds.util.trajectory import scan_noop
 
+
+
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 class TFDSBaseMano(tfds.core.GeneratorBasedBuilder, ABC):
     """DatasetBuilder Base Class for LUC XGym Mano"""
@@ -209,8 +214,6 @@ class TFDSBaseMano(tfds.core.GeneratorBasedBuilder, ABC):
 
         def _parse_example(idx, ep):
 
-            spec = lambda arr: jax.tree.map(lambda x: x.shape, arr)
-
             ep = np.load(ep)
             ep = {k: ep[k] for k in ep.files}
             # ep = self.dict_unflatten({k: ep[k] for k in ep.files})
@@ -266,6 +269,7 @@ class TFDSBaseMano(tfds.core.GeneratorBasedBuilder, ABC):
         # return beam.Create(ds) | beam.Map(_parse_example)
 
 
+
 class XgymSingle(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder Base for LUC XGym"""
 
@@ -279,6 +283,7 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.spec = lambda arr: jax.tree.map(lambda x: x.shape, arr)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Dataset metadata (homepage, citation,...)."""
@@ -289,6 +294,27 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
                 dtype=np.uint8,
                 encoding_format="png",
                 doc=doc,
+            )
+
+        def feat_prop():
+            return tfds.features.FeaturesDict(
+                {
+                    "joints": tfds.features.Tensor(
+                        shape=[7],
+                        dtype=np.float32,
+                        doc="Joint angles. radians",
+                    ),
+                    "position": tfds.features.Tensor(
+                        shape=[6],
+                        dtype=np.float32,
+                        doc="Joint positions. xyz millimeters (mm) and rpy",
+                    ),
+                    "gripper": tfds.features.Tensor(
+                        shape=[1],
+                        dtype=np.float32,
+                        doc="Gripper position. 0-850",
+                    ),
+                }
             )
 
         return self.dataset_info_from_configs(
@@ -314,28 +340,11 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
                                             ),
                                         }
                                     ),
-                                    "proprio": tfds.features.FeaturesDict(
-                                        {
-                                            "joints": tfds.features.Tensor(
-                                                shape=[7],
-                                                dtype=np.float32,
-                                                doc="Joint angles. radians",
-                                            ),
-                                            "position": tfds.features.Tensor(
-                                                shape=[7],
-                                                dtype=np.float32,
-                                                doc="Joint positions. xyz millimeters (mm) and rpy",
-                                            ),
-                                        }
-                                    ),
+                                    "proprio": feat_prop(),
                                 }
                             ),
-                            "action": tfds.features.Tensor(
-                                # do we need 8? for terminate episode action?
-                                shape=(7,),
-                                dtype=np.float32,
-                                doc="Robot action, consists of [xyz,rpy,gripper].",
-                            ),
+                            "action": feat_prop(),  # TODO does it make sense to store proprio and  actions?
+                            #
                             "discount": tfds.features.Scalar(
                                 dtype=np.float32,
                                 doc="Discount if provided, default to 1.",
@@ -373,7 +382,7 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
 
-        root = Path(f"~/xgym_{self.name}_v{self.VERSION[0]}").expanduser()
+        root = Path.home() / f"{self.name}_v{ str(self.VERSION)[0]}"
         files = list(root.rglob("*.dat"))
         return {"train": self._generate_examples(files)}
 
@@ -393,39 +402,79 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
 
     def _parse_example(self, path):
 
-        ep = xgym.viz.memmap.read(path) 
-        n = len(ep(ep['time']))
+        try:
+            info, ep = xgym.viz.memmap.read(path)
+        except Exception as e:
+            xgym.logger.error(f"Error reading {path}")
+            xgym.logger.error(e)
+            return None
 
-        # spec = lambda arr: jax.tree.map(lambda x: x.shape, arr)
-        # pprint(spec(ep))
+        n = len(ep["time"])
 
-        ep['robot']['gripper'] /= 850
-        ep['robot']['pose'][:, :3] /= 1e3
-        binarize = partial(binarize, open=0.95, close=0.4) # doesnt fully close
-        ep['robot']['gripper'] = binarize(ep['robot']['gripper'])
-        pos = np.concatenate(ep["robot"]["pose"], ep["robot"]["gripper"],axis=1)
+        # pprint(self.spec(ep))
 
-        noops = np.array(scan_noop(jnp.array(pos),threshold=1e-2))
+        ### cleanup and remap keys
+        ep.pop("time")
+        ep.pop("gello_joints")
+
+        ep["robot"] = {}
+        ep["robot"]["joints"] = ep.pop("xarm_joints")
+        ep["robot"]["position"] = ep.pop("xarm_pose")
+        ep["robot"]["gripper"] = ep.pop("xarm_gripper")
+        # ep['robot'] = {'joints': joints, 'position': np.concatenate((pose, grip), axis=1)}
+
+        try:  # we dont want the ones with only rs
+            _ = ep.get("/xgym/camera/worm")
+        except KeyError:
+            return None
+
+        zeros = lambda: np.zeros((n, 224, 224, 3), dtype=np.uint8)
+        ep["/xgym/camera/wrist"] = ep.pop("/xgym/camera/rs")
+        ep["/xgym/camera/overhead"] = ep.pop("/xgym/camera/over", zeros())
+        ep["image"] = {
+            k: ep.pop(f"/xgym/camera/{k}", zeros())
+            for k in ["worm", "side", "overhead", "wrist"]
+        }
+
+        ### scale and binarize
+        ep["robot"]["gripper"] /= 850
+        ep["robot"]["position"][:, :3] /= 1e3
+        pbin = partial(binarize, open=0.95, close=0.4)  # doesnt fully close
+        ep["robot"]["gripper"] = np.array(pbin(jnp.array(ep["robot"]["gripper"])))
+        pos = np.concatenate((ep["robot"]["position"], ep["robot"]["gripper"]), axis=1)
+
+        ### filter noop
+        noops = np.array(scan_noop(jnp.array(pos), threshold=1e-3))
         mask = ~noops
-        ep = jax.tree.map(lambda x: x[mask], ep)
+        ep = jax.tree.map(select := lambda x: x[mask], ep)
 
-        ep['action'] = ep['robot']['pose'][1:] - ep['robot']['pose'][:-1]
-        ep['action'] = jax.tree.map(lambda x: x[1:]-x[:-1], ep['robot']) # pose and joint action
-        ep = ep to [:-1]
+        ### calculate action
+        action = jax.tree.map(
+            lambda x: x[1:] - x[:-1], ep["robot"]
+        )  # pose and joint action
+        action["gripper"] = ep["robot"]["gripper"][1:]  # gripper is absolute
+        ep = jax.tree.map(lambda x: x[:-1], ep)
+        # ep["action"] = action # action is not an observation
 
-        episode =[
+        # pprint(self.spec(ep))
+
+        ### final remaps
+        ep["proprio"] = ep.pop("robot")
+
+        geti = lambda x, i: jax.tree.map(lambda y: y[i], x)
+        episode = [
             {
-                "observation": step,
-                "action": act.astype(np.float32),
+                "observation": geti(ep, i),
+                "action": geti(action, i),
                 "discount": 1.0,
                 "reward": float(i == (len(ep) - 1)),
                 "is_first": i == 0,
                 "is_last": i == (len(ep) - 1),
                 "is_terminal": i == (len(ep) - 1),
-                "language_instruction": task,
-                "language_embedding": lang,
+                "language_instruction": self.task,
+                "language_embedding": self.lang,
             }
-            for i, step in enumerate(ep["time"][:-1])
+            for i in range(len(ep["proprio"]["position"]))
         ]
 
         # if you want to skip an example for whatever reason, simply return None
@@ -441,7 +490,9 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
         self.lang = np.load(self.taskfile)
 
         for path in ds[1:]:
-            yield self._parse_example(path)
+            ret =  self._parse_example(path)
+            if ret is not None:
+                yield ret
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
         # beam = tfds.core.lazy_imports.apache_beam
