@@ -404,6 +404,9 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
 
         try:
             info, ep = xgym.viz.memmap.read(path)
+            cams = [k for k in info['schema'].keys() if "camera" in k]
+            if len(cams) < 2:
+                raise ValueError(f"Not enough cameras {cams}")
         except Exception as e:
             xgym.logger.error(f"Error reading {path}")
             xgym.logger.error(e)
@@ -426,6 +429,7 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
         try:  # we dont want the ones with only rs
             _ = ep.get("/xgym/camera/worm")
         except KeyError:
+            print('no worm camera')
             return None
 
         zeros = lambda: np.zeros((n, 224, 224, 3), dtype=np.uint8)

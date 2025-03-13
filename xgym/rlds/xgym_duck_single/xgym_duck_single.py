@@ -14,7 +14,7 @@ from xgym.rlds.base import XgymSingle
 class XgymDuckSingle(XgymSingle):
     """DatasetBuilder for LUC XGym 'duck in basked' Single Arm v1.0.0"""
 
-    VERSION = tfds.core.Version("4.0.0")
+    VERSION = tfds.core.Version("4.0.1")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
