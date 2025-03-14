@@ -443,13 +443,19 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
         ### scale and binarize
         ep["robot"]["gripper"] /= 850
         ep["robot"]["position"][:, :3] /= 1e3
-        pbin = partial(binarize, open=0.95, close=0.4)  # doesnt fully close
-        ep["robot"]["gripper"] = np.array(pbin(jnp.array(ep["robot"]["gripper"])))
-        pos = np.concatenate((ep["robot"]["position"], ep["robot"]["gripper"]), axis=1)
+        _binarize = partial(binarize, open=0.95, close=0.4)  # doesnt fully close
+        ep["robot"]["gripper"] = np.array(_binarize(jnp.array(ep["robot"]["gripper"])))
 
-        ### filter noop
-        noops = np.array(scan_noop(jnp.array(pos), threshold=1e-3))
+        ### filter noop cartesian
+        pos = np.concatenate((ep["robot"]["position"], ep["robot"]["gripper"]), axis=1)
+        noops = np.array(scan_noop(jnp.array(pos), threshold=1e-2))
         mask = ~noops
+        # filter noop joints
+        jpos = np.concatenate([ep["robot"]["joints"], ep["robot"]["gripper"]], axis=1)
+        jnoop = np.array(scan_noop(jnp.array(jpos), threshold=1e-2))
+        jmask = ~jnoop
+
+        mask = np.logical_and(mask, jmask)
         ep = jax.tree.map(select := lambda x: x[mask], ep)
 
         ### calculate action
