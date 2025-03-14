@@ -113,6 +113,7 @@ class Base(gym.Env):
         self,
         render_mode="human",
         out_dir=".",
+        space="cartesian",
         # robot: XArmAPI, boundary: bd.Boundary, cameras: List[RealSenseCamera]
     ):
         super().__init__()
@@ -120,6 +121,7 @@ class Base(gym.Env):
 
         # TODO make the observation space flexible to num_cameras
 
+        self.space = space
         self.imsize = 640
         self.action_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32
@@ -171,7 +173,7 @@ class Base(gym.Env):
         self.robot.set_state(0)
         self.robot.set_gripper_enable(True)
         self.robot.set_gripper_mode(0)
-        self.robot.set_gripper_speed(3000)
+        self.robot.set_gripper_speed(2000)
         self.robot.set_gripper_position(800, wait=False)
         logger.info("Robot initialized.")
 
@@ -444,7 +446,7 @@ class Base(gym.Env):
                 )
 
         try:
-            action = self.safety_check(action)
+            # action = self.safety_check(action)
             self._step(action, wait=self.mode == 0)
             obs = self.episode[-1] if len(self.episode) else self.observation()
             return self.observation(), np.array(0.0, dtype=np.float64), self._done, {}
@@ -457,15 +459,25 @@ class Base(gym.Env):
     @abstractmethod
     def _step(self, action, force_grip=False, wait=True):
 
-        assert len(action) == 7
-        act = RS.from_vector(action)
+        if self.space == 'cartesian':
+            assert len(action) == 7
+            act = RS.from_vector(action)
+            gripper = act.gripper
+        else:
+            gripper = action[-1]
+
 
         if (
-            act.gripper < 0.9 or (self.gripper / self.GRIPPER_MAX) < 0.9 or force_grip
+            abs(gripper - self.gripper) > 0.05 or force_grip
         ):  # save time?
-            self.robot.set_gripper_position(act.gripper * self.GRIPPER_MAX, wait=wait)
+            self.robot.set_gripper_position(gripper * self.GRIPPER_MAX, wait=False)
         else:
             logger.info("skipping gripper for speed")
+
+        if self.space == 'joint':
+            # self._go_joints(self.position+ RS(joints=action[:-1]), relative=False, is_radian=True)
+            self._go_joints(RS(joints=action[:-1]), relative=True, is_radian=True)
+            return # no cartesian move
 
         print(f"waiting: {wait}")
         if wait:

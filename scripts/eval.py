@@ -8,8 +8,6 @@ import draccus
 import gymnasium as gym
 import jax
 import numpy as np
-import tensorflow as tf
-import tensorflow_datasets as tfds
 from pynput import keyboard
 from tqdm import tqdm
 
@@ -21,19 +19,18 @@ from xgym.utils import camera as cu
 from xgym.utils.boundary import PartialRobotState as RS
 
 
-import draccus
-
 @dataclass
 class RunCFG:
     host: str
     port: int
 
+    space: str = "cartesian"
     base_dir: str = osp.expanduser("~/data")
     time: str = time.strftime("%Y%m%d-%H%M%S")
     task: str = ""
     ensemble: bool = True
     nsteps: int = 100
-    
+
     def __post_init__(self):
         self.check()
 
@@ -52,8 +49,8 @@ def main(cfg: RunCFG):
     os.makedirs(cfg.data_dir, exist_ok=True)
 
     model = ModelController(
-	cfg.host,
-	cfg.port,
+        cfg.host,
+        cfg.port,
         ensemble=cfg.ensemble,
         task=cfg.task,
     )
@@ -61,17 +58,15 @@ def main(cfg: RunCFG):
     model.reset()
 
     # env = gym.make("xgym/stack-v0")
-    env = Lift(out_dir=cfg.data_dir, random=False)
+    env = Lift(out_dir=cfg.data_dir, random=False, space=cfg.space)
     env.logger.warning(model.tasks[model.task])
-
-    # ds = tfds.load("xgym_lift_single", split="train")
 
     freq = 5  # hz
     dt = 1 / freq
 
     for ep in tqdm(range(100), desc="Episodes"):
         obs = env.reset()
-        env.set_mode(7)
+        env.set_mode(7) if env.space == 'cartesian' else env.set_mode(0)
         time.sleep(0.4)
         env.start_record()
 
@@ -112,11 +107,12 @@ def main(cfg: RunCFG):
             print(actions.round(3))
             for a, action in enumerate(actions):
 
-                action[:3] *= int(1e3)
+                # action[:3] *= int(1e3)
                 print(action.shape)
                 # action[3:6] = action[3:6].clip(-0.25,0.25)
                 # input("Press Enter to continue...")
-                action[-1] *= 0.8 if action[-1] < 0.5 else 1
+
+                # action[-1] *= 0 if action[-1] < 0.5 else 1
                 # action[-1] *= 0 if action[-1] < 0.2 else 1
                 # action[-1] = 1 if action[-1] > 0.8 else action[-1]
 

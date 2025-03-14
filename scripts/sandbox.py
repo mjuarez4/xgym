@@ -80,7 +80,7 @@ def main(cfg: RunCFG):
 
     hist = np.zeros(7)
 
-    for ep in tqdm(cfg.nepisodes, desc="Episodes"):
+    for ep in tqdm(range(cfg.nepisodes), desc="Episodes"):
 
         obs = env.reset()
         env.set_mode(7)
