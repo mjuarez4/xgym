@@ -1,4 +1,5 @@
 import abc
+import warnings
 from abc import ABC
 from functools import partial
 from pathlib import Path
@@ -9,16 +10,13 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import tensorflow_datasets as tfds
-from rich.pretty import pprint
-
 import xgym
+from rich.pretty import pprint
 from xgym.rlds.util.trajectory import binarize_gripper_actions as binarize
 from xgym.rlds.util.trajectory import scan_noop
 
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
-
-import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
 
 class TFDSBaseMano(tfds.core.GeneratorBasedBuilder, ABC):
     """DatasetBuilder Base Class for LUC XGym Mano"""
@@ -269,7 +267,6 @@ class TFDSBaseMano(tfds.core.GeneratorBasedBuilder, ABC):
         # return beam.Create(ds) | beam.Map(_parse_example)
 
 
-
 class XgymSingle(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder Base for LUC XGym"""
 
@@ -284,6 +281,7 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.spec = lambda arr: jax.tree.map(lambda x: x.shape, arr)
+        self.threshold = 1e-3
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Dataset metadata (homepage, citation,...)."""
@@ -404,7 +402,7 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
 
         try:
             info, ep = xgym.viz.memmap.read(path)
-            cams = [k for k in info['schema'].keys() if "camera" in k]
+            cams = [k for k in info["schema"].keys() if "camera" in k]
             if len(cams) < 2:
                 raise ValueError(f"Not enough cameras {cams}")
         except Exception as e:
@@ -429,7 +427,7 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
         try:  # we dont want the ones with only rs
             _ = ep.get("/xgym/camera/worm")
         except KeyError:
-            print('no worm camera')
+            print("no worm camera")
             return None
 
         zeros = lambda: np.zeros((n, 224, 224, 3), dtype=np.uint8)
@@ -448,14 +446,15 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
 
         ### filter noop cartesian
         pos = np.concatenate((ep["robot"]["position"], ep["robot"]["gripper"]), axis=1)
-        noops = np.array(scan_noop(jnp.array(pos), threshold=1e-2))
+        noops = np.array(scan_noop(jnp.array(pos), threshold=self.threshold))
         mask = ~noops
         # filter noop joints
         jpos = np.concatenate([ep["robot"]["joints"], ep["robot"]["gripper"]], axis=1)
-        jnoop = np.array(scan_noop(jnp.array(jpos), threshold=1e-2))
+        jnoop = np.array(scan_noop(jnp.array(jpos), threshold=self.threshold))
         jmask = ~jnoop
-
         mask = np.logical_and(mask, jmask)
+
+        print(f"Kept {mask.sum()} of {n} steps")
         ep = jax.tree.map(select := lambda x: x[mask], ep)
 
         ### calculate action
@@ -500,7 +499,7 @@ class XgymSingle(tfds.core.GeneratorBasedBuilder):
         self.lang = np.load(self.taskfile)
 
         for path in ds[1:]:
-            ret =  self._parse_example(path)
+            ret = self._parse_example(path)
             if ret is not None:
                 yield ret
 
