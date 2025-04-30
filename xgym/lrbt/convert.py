@@ -261,13 +261,20 @@ def main(cfg: BaseReaderConfig):
         steps.pop("action")
 
         obs = steps.pop("observation")
-        obs["state"] = obs.pop("proprio")
         img = obs.pop("image")
         img["high"] = img.pop("overhead")
         img["low"] = img.pop("worm")
         # to encode as mp4 with ffmpeg
         img = jax.tree.map(lambda x: x / 255, img)
         obs["image"] = img
+
+        # force to be joint actions
+        state = obs.pop("proprio")
+        state = np.concatenate([state["joints"],state['gripper']], axis=-1)
+        obs["state"] = state
+        steps['action'] = state
+        pprint(steps["action"].shape)
+
         steps["observation"] = obs
 
         lang = {
@@ -276,8 +283,12 @@ def main(cfg: BaseReaderConfig):
         }
         steps["lang"] = lang["lang"]
 
+
+
         # pprint(spec(steps))
         step0 = take(steps, 0)
+
+
 
         if dataset is None:
             pprint(spec(step0))
