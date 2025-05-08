@@ -133,7 +133,8 @@ def create(
             "state": {
                 "gripper": Name.GRIPPER,
                 "joints": Name.DOF7,
-                "position": Name.POSE,
+                "position": Name.POSE, # TODO fix
+                # "pose": Name.POSE, # throw hf error?
             },
         },
         "lang": Name.LANG,
