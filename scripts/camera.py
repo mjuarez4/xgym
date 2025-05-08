@@ -53,11 +53,12 @@ def main():
             k: im
             for k, (ret, im) in {k: cam.retrieve() for k, cam in cams.items()}.items()
         }
+        pprint({k: v.shape for k, v in imgs.items()})
         imgs = {k: cu.square(f) for k, f in imgs.items()}
         imgs = cu.writekeys(imgs)
 
         # resize by the biggest dimension of frames
-        imgs = cu.resize_all(list(imgs.values()))
+        imgs = cu.resize_all(list(imgs.values()),m=640)
         frame = np.concatenate(imgs, axis=1)
 
         if store:
