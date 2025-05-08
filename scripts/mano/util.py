@@ -1,34 +1,22 @@
-import json_numpy
-
-json_numpy.patch()
-import argparse
 import dataclasses
-import json
-import logging
 import os
 import os.path as osp
 import time
 import traceback
-from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from pprint import pprint
 from typing import Any, Dict, List, Optional
 
 import cv2
-import draccus
 import imageio
 import jax
 import numpy as np
-import tensorflow as tf
 import torch
-import uvicorn
-from colorama import Fore, Style, init
-from draccus.argparsing import ArgumentParser as AP
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+import tyro
 from hamer.configs import CACHE_DIR_HAMER
-from hamer.datasets.vitdet_dataset import DEFAULT_MEAN, DEFAULT_STD,ViTDetDataset
+from hamer.datasets.vitdet_dataset import (DEFAULT_MEAN, DEFAULT_STD,
+                                           ViTDetDataset)
 from hamer.models import (DEFAULT_CHECKPOINT, HAMER, MANO, download_models,
                           load_hamer)
 from hamer.utils import SkeletonRenderer, recursive_to
@@ -39,109 +27,13 @@ from PIL import Image
 from smplx.utils import (Array, MANOOutput, SMPLHOutput, SMPLOutput,
                          SMPLXOutput, Struct, Tensor, to_np, to_tensor)
 from tqdm import tqdm
+
+from log import logger
 from vitpose_model import ViTPoseModel
-import torch
 
 # from manotorch.manolayer import ManoLayer, MANOOutput
-tf.config.set_visible_devices([], "GPU")
 
 LIGHT_BLUE = (0.65098039, 0.74117647, 0.85882353)
-
-
-def json_response(obj):
-    return JSONResponse(json_numpy.dumps(obj))
-
-
-def resize(img, size=(224, 224)):
-    img = tf.image.resize(img, size=size, method="lanczos3", antialias=True)
-    return tf.cast(tf.clip_by_value(tf.round(img), 0, 255), tf.uint8).numpy()
-
-
-def stack_and_pad(history: deque, num_obs: int):
-    """
-    Converts a list of observation dictionaries (`history`) into a single observation dictionary
-    by stacking the values. Adds a padding mask to the observation that denotes which timesteps
-    represent padding based on the number of observations seen so far (`num_obs`).
-    """
-    horizon = len(history)
-    full_obs = {k: np.stack([dic[k] for dic in history]) for k in history[0]}
-    pad_length = horizon - min(num_obs, horizon)
-    timestep_pad_mask = np.ones(horizon)
-    timestep_pad_mask[:pad_length] = 0
-    full_obs["timestep_pad_mask"] = timestep_pad_mask
-    return full_obs
-
-
-@dataclass
-class DemoCN:
-    """config node for demo"""
-
-    checkpoint: str = DEFAULT_CHECKPOINT  # Path to pretrained model checkpoint
-    img_folder: str = "example_data"  # Folder with input images
-    out_folder: str = "out_demo"  # Output folder to save rendered results
-    side_view: bool = False  # If set, render side view also
-    full_frame: bool = True  # If set, render all people together also
-    save_mesh: bool = False  # If set, save meshes to disk also
-    batch_size: int = 1  # Batch size for inference/fitting
-    rescale_factor: float = 2.0  # Factor for padding the bbox
-    body_detector: str = "vitdet"  # Using regnety improves runtime and reduces memory
-    file_type: List[str] = field(default_factory=lambda: ["*.jpg", "*.png"])
-
-    # TODO fix! ... such a mess
-    port: int = 8002  # Port to run the server on
-    host: str = "0.0.0.0"  # Host to run the server on
-
-
-# Initialize colorama
-init(autoreset=True)
-
-
-class ColoredFormatter(logging.Formatter):
-    """Custom formatter to add colors based on log level."""
-
-    LOG_COLORS = {
-        logging.DEBUG: Fore.BLUE,
-        logging.INFO: Fore.GREEN,
-        logging.WARNING: Fore.YELLOW,
-        logging.ERROR: Fore.RED,
-        logging.CRITICAL: Fore.RED + Style.BRIGHT,
-    }
-
-    def format(self, record):
-        log_color = self.LOG_COLORS.get(record.levelno, Fore.WHITE)
-        message = super().format(record)
-        return f"{log_color}{message}{Style.RESET_ALL}"
-
-
-class Logger:
-    def __init__(self, name="MyLogger", level=logging.DEBUG):
-        # Create a logger
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(level)
-
-        # Create console handler
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(level)
-
-        # Define formatter with time, name, level, and message
-        formatter = ColoredFormatter(
-            "%(message)s",  # '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-        self.logger.propagate = False
-
-        # Attach formatter to the console handler
-        console_handler.setFormatter(formatter)
-
-        # Attach handler to the logger
-        if not self.logger.hasHandlers():
-            self.logger.addHandler(console_handler)
-
-    def get_logger(self):
-        return self.logger
-
-
-logger = Logger().get_logger()
 
 
 def infer(
@@ -253,20 +145,7 @@ def detect_humans(detector, img_cv2):
     return pred_bboxes, pred_scores
 
 
-def keyp2bbox(keyp):
-    """get bounding box from keypoints
-    the boxes are returned in the format [x1, y1, x2, y2]
-    """
-    valid = keyp[:, 2] > 0.5
-    if sum(valid) > 3:  # if more than 3 keypoints have confidence > 0.5?
-        bbox = [
-            keyp[valid, 0].min(),
-            keyp[valid, 1].min(),
-            keyp[valid, 0].max(),
-            keyp[valid, 1].max(),
-        ]
-        return bbox
-    return None
+from array_util import keyp2bbox
 
 
 def extract_hand_keypoints(poses):
@@ -541,7 +420,7 @@ def init_vitdet():
     Initialize the ViTDet model with a pretrained checkpoint.
     TODO fix download of model_final_f05665.pkl from hub
 
-    in $HOME / 
+    in $HOME /
     .torch/iopath_cache/detectron2/ViTDet/COCO/cascade_mask_rcnn_vitdet_h/f328730692/model_final_f05665.pkl
     """
 
@@ -581,8 +460,6 @@ def init_detector(args):
         return init_regnety()
     else:
         raise ValueError(f"Unknown body detector: {args.body_detector}")
-
-
 
 
 def cam_full_to_crop(cam_full, box, img_size, focal_length=5000.0):
@@ -664,19 +541,12 @@ def plot_cropped(img, out):
     return cropped_image
 
 
-def flatten(d, parent_key="", sep="."):
-    items = []
-    for k, v in d.items():
-        new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(flatten(v, new_key, sep=sep).items())
-        else:
-            items.append((new_key, v))
-    return dict(items)
+@dataclass
+class Config:
+    pass
 
 
-@draccus.wrap()
-def main(cfg: DemoCN):
+def main(cfg: Config):
     args = cfg
     pprint(args)
 
@@ -718,7 +588,9 @@ def main(cfg: DemoCN):
                 lambda x: x[0], out.data, is_leaf=is_leaf
             )  # everything is wrapped in list
 
-            out = flatten(out)
+            from flax.traverse_util import flatten_dict
+
+            out = flatten_dict(out)
 
             clean = lambda x: (
                 x.detach().cpu().numpy() if isinstance(x, torch.Tensor) else x
