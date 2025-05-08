@@ -1,77 +1,33 @@
-import json_numpy
-
-json_numpy.patch()
+import os
 import time
 import traceback
 from collections import deque
 from dataclasses import dataclass, field
-from pprint import pprint
 from typing import Any, Dict, List
 
-import os
 import cv2
 import jax
 import numpy as np
-import tensorflow as tf
 import torch
-import uvicorn
-from draccus.argparsing import ArgumentParser as AP
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+import tyro
 from hamer.configs import CACHE_DIR_HAMER
 from hamer.models import (DEFAULT_CHECKPOINT, HAMER, MANO, download_models,
                           load_hamer)
 from hamer.utils import SkeletonRenderer, recursive_to
 from hamer.utils.renderer import Renderer, cam_crop_to_full
 from jax import numpy as jnp
-from util import infer, init_detector, resize, stack_and_pad
+from rich.pretty import pprint
+
+from array_util import stack_and_pad
+from util import infer, init_detector
 from vitpose_model import ViTPoseModel
-
-import xgym
-
-def json_response(obj):
-    return JSONResponse(jax.tree.map(json_numpy.dumps, obj))
+from webpolicy.deploy.base_policy import BasePolicy
+from webpolicy.deploy.server import WebsocketPolicyServer as Server
 
 
 def resize(img, size=(224, 224)):
     img = tf.image.resize(img, size=size, method="lanczos3", antialias=True)
     return tf.cast(tf.clip_by_value(tf.round(img), 0, 255), tf.uint8).numpy()
-
-
-def stack_and_pad(history: deque, num_obs: int):
-    """
-    Converts a list of observation dictionaries (`history`) into a single observation dictionary
-    by stacking the values. Adds a padding mask to the observation that denotes which timesteps
-    represent padding based on the number of observations seen so far (`num_obs`).
-    """
-    horizon = len(history)
-    full_obs = {k: np.stack([dic[k] for dic in history]) for k in history[0]}
-    pad_length = horizon - min(num_obs, horizon)
-    timestep_pad_mask = np.ones(horizon)
-    timestep_pad_mask[:pad_length] = 0
-    full_obs["timestep_pad_mask"] = timestep_pad_mask
-    return full_obs
-
-
-@dataclass
-class DemoCN:
-    """config node for demo"""
-
-    checkpoint: str = DEFAULT_CHECKPOINT  # Path to pretrained model checkpoint
-    img_folder: str = "example_data"  # Folder with input images
-    out_folder: str = "out_demo"  # Output folder to save rendered results
-    side_view: bool = False  # If set, render side view also
-    full_frame: bool = True  # If set, render all people together also
-    save_mesh: bool = False  # If set, save meshes to disk also
-    batch_size: int = 1  # Batch size for inference/fitting
-    rescale_factor: float = 2.0  # Factor for padding the bbox
-    body_detector: str = "vitdet"  # Using regnety improves runtime and reduces memory
-    file_type: List[str] = field(default_factory=lambda: ["*.jpg", "*.png"])
-
-    # TODO fix!
-    port: int = 8002  # Port to run the server on
-    host: str = "0.0.0.0"  # Host to run the server on
-    device: int = 0  # Cuda device to run the server on
 
 
 def flatten(d, parent_key="", sep="."):
@@ -97,11 +53,13 @@ def unnormalize(img):
     return (np.clip(img, 0, 1) * 255).astype(np.uint8)
 
 
-class HttpServer:
+
+
+class Policy(BasePolicy):
 
     def __init__(self, cfg):
-
         self.cfg = cfg
+
         # Download and load checkpoints
         download_models(CACHE_DIR_HAMER)
         self.model, self.model_cfg = load_hamer(cfg.checkpoint)
@@ -122,28 +80,19 @@ class HttpServer:
         )  # Setup the renderer
         self.skrenderer = SkeletonRenderer(self.model_cfg)
 
+        print('policy init done')
         # torch models dont compile... so we are done
 
-    def run(self, port=8001, host="0.0.0.0"):
-        self.app = FastAPI()
-        self.app.post("/query")(self.forward)
-        self.app.post("/reset")(self.reset)
-        uvicorn.run(self.app, host=host, port=port)
+    def reset(self):
+        pass
 
-    def reset(self, payload: Dict[Any, Any]):
-        return "reset"
-
-    def forward(self, payload: Dict[Any, Any]):
+    def infer(self, obs: dict):
         try:
 
-            obs = np.array(payload["observation"])
-            # for key in obs:
-            # if "image" in key:
-            # obs[key] = resize(obs[key])
-
+            img = obs["img"]
             out = infer(
                 i=0,
-                img=obs,
+                img=img,
                 detector=self.detector,
                 vitpose=self.vitpose,
                 device=self.device,
@@ -169,31 +118,56 @@ class HttpServer:
             prepare = lambda x: cv2.resize(x.transpose(1, 2, 0), (224, 224))
             out["img_wrist"] = np.stack(prepare(x) for x in out.pop("img"))
             out["img_wrist"] = unnormalize(out["img_wrist"])
-            out["img"] = obs
+            out["img"] = img
 
-            return json_response(out)
+            return out
 
         except Exception as e:
             print(traceback.format_exc())
             return "error"
 
 
-import draccus
+@dataclass
+class PolicyConfig:
+
+    checkpoint: str = DEFAULT_CHECKPOINT  # Path to pretrained model checkpoint
+    img_folder: str = "example_data"  # Folder with input images
+    out_folder: str = "out_demo"  # Output folder to save rendered results
+    side_view: bool = False  # If set, render side view also
+    full_frame: bool = True  # If set, render all people together also
+    save_mesh: bool = False  # If set, save meshes to disk also
+    batch_size: int = 1  # Batch size for inference/fitting
+    rescale_factor: float = 2.0  # Factor for padding the bbox
+    body_detector: str = "vitdet"  # Using regnety improves runtime and reduces memory
+    file_type: List[str] = field(default_factory=lambda: ["*.jpg", "*.png"])
+    device: int = 0  # Cuda device to run the server on
 
 
-@draccus.wrap()
-def main(cfg: DemoCN):
+@dataclass
+class Config:
+    """config node for demo"""
 
-    xgym.logger.info("Starting server")
-    xgym.logger.info(f'using device: GPU{cfg.device}')
-    xgym.logger.info(f"Running on {cfg.host}:{cfg.port}")
+    policy: PolicyConfig = field(default_factory=PolicyConfig)
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.device)
+    port: int = 8002  # Port to run the server on
+    host: str = "0.0.0.0"  # Host to run the server on
 
-    tf.config.set_visible_devices([], "GPU")
-    server = HttpServer(cfg)
-    server.run(cfg.port, cfg.host)
+
+def main(cfg: Config):
+
+    pprint(cfg)
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.policy.device)
+
+    policy = Policy(cfg.policy)
+    server = Server(
+        policy,
+        host=cfg.host,
+        port=cfg.port,
+        metadata=None,
+    )
+    print('serving on', cfg.host, cfg.port)
+    server.serve_forever()
 
 
 if __name__ == "__main__":
-    main()
+    main(tyro.cli(Config))
