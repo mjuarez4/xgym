@@ -1,4 +1,5 @@
 import time
+import jax
 from enum import Enum
 import datetime
 from dataclasses import dataclass
@@ -145,8 +146,14 @@ class Config:
         return int(self.seconds * self.fps)
 
     
+def spec (arr): 
+    return jax.tree.map(lambda x: x.shape, arr)
+
 def flush(episode: dict[list], ep: int, cfg: Config):
 
+    episode = {k: np.array(v) for k, v in episode.items()}
+    pprint(spec(episode))
+    # quit()
     # episode = {CAM_MAP[k]: v for k, v in episode.items() if k in CAM_MAP}
     now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     out = str(cfg.dir / f"ep{ep}_{now}")
@@ -164,31 +171,41 @@ def recolor(img):
 def wait_for_pedal(pedal: FootPedalRunner, cams: dict[int, MyCamera], show: bool ):
 
     pprint('press pedal to start recording')
+
+    def border(img):
+        """makes a red border around the image"""
+        img = cv2.copyMakeBorder(img, 10, 10, 10, 10, cv2.BORDER_CONSTANT, value=(0, 0, 255))
+        return img
+
     while True:
         imgs = {k: cam.read()[1] for k, cam in cams.items()}
         all_imgs = np.concatenate(list(imgs.values()), axis=1)
 
         if show:
-            cv2.imshow("frame", recolor(all_imgs))
+            cv2.imshow("frame", border(recolor(all_imgs)))
             key = cv2.waitKey(1)
             if key == ord("q"):
                 break
         p = pedal.value
         if p[0] == 1:
+            pedal.value[0] = 0
             break
+
 
 
 def main(cfg: Config):
 
 
     if cfg.mode == Mode.PLAY:
-        eps = list(cfg.dir.glob("*.npz"))
+        eps = list(cfg.dir.glob("ep*.npz"))
         wait = int(1000 / cfg.fps) # convert fps to ms
         firsts = []
         for ep in tqdm(eps, leave=False):
             data = np.load(ep)
+            data = {k: v for k, v in data.items()}
 
             n = len(data[list(data.keys())[0]])
+            # pprint(spec(data))
             for i in tqdm(range(n),leave=False):
                 steps = {k: v[i] for k, v in data.items()}
                 all_imgs = np.concatenate(list(steps.values()), axis=1)
@@ -260,6 +277,7 @@ def main(cfg: Config):
 
             if pedal.value[0] == 1:
                 pedal.value[0] = 0
+                time.sleep(0.1)
                 break
 
             toc = time.time()
