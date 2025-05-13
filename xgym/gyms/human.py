@@ -13,8 +13,9 @@ from xgym.utils.boundary import PartialRobotState as RS
 
 from typing import Union
 
+
 class Human(Base):
-    def __init__(self, mode: Union[None, 'manual'] = None):
+    def __init__(self, mode: Union[None, "manual"] = None):
         super().__init__()
 
         self.mode = mode
@@ -23,8 +24,8 @@ class Human(Base):
         self.kb.register(keyboard.Key.space, lambda: self.stop(toggle=True))
         self.kb.register(keyboard.Key.enter, lambda: self.proceed())
 
-        ready = RS(cartesian=[400,-125,350], aa=[np.pi,0,-np.pi/2])
-        ready = self.kin_inv(np.concatenate([ready.cartesian,ready.aa]))
+        ready = RS(cartesian=[400, -125, 350], aa=[np.pi, 0, -np.pi / 2])
+        ready = self.kin_inv(np.concatenate([ready.cartesian, ready.aa]))
         self.ready = RS(joints=ready)
 
         self.boundary = bd.AND(
@@ -35,10 +36,12 @@ class Human(Base):
                 ),
                 bd.AngularBoundary(
                     min=RS(
-                        aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2]) + self.start_angle
+                        aa=np.array([-np.pi / 4, -np.pi / 4, -np.pi / 2])
+                        + self.start_angle
                     ),
                     max=RS(
-                        aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2]) + self.start_angle
+                        aa=np.array([np.pi / 4, np.pi / 4, np.pi / 2])
+                        + self.start_angle
                     ),
                 ),
                 bd.GripperBoundary(min=10, max=800),

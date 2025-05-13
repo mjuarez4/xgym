@@ -6,8 +6,12 @@ import time
 import numpy as np
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import (QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy,
-                       ReliabilityPolicy)
+from rclpy.qos import (
+    QoSDurabilityPolicy,
+    QoSProfile,
+    QoSReliabilityPolicy,
+    ReliabilityPolicy,
+)
 from sensor_msgs.msg import CompressedImage, Image, JointState
 from std_msgs.msg import Bool, Float32MultiArray, String
 from xarm_msgs.msg import CIOState, RobotMsg
@@ -22,7 +26,7 @@ class Base(Node):
     def __init__(self, node_name):
         super().__init__(node_name)
         self.get_logger().info("initializing...")
-        self.p=0
+        self.p = 0
         self.data = {}
 
         self.active = False
@@ -41,13 +45,11 @@ class Base(Node):
         self.camqos = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.cams = self.list_camera_topics()
         print(self.cams)
-        self.data = self.data | {k: np.zeros((224,224,3)) for k in self.cams}
+        self.data = self.data | {k: np.zeros((224, 224, 3)) for k in self.cams}
 
         self.subs = {
             k: self.create_subscription(
-                CompressedImage, k, 
-                partial(self.set_image, key=k),
-                self.camqos
+                CompressedImage, k, partial(self.set_image, key=k), self.camqos
             )
             for k in self.cams
         }
@@ -62,13 +64,13 @@ class Base(Node):
 
     def set_active(self, msg: Bool):
         self.active = msg.data
-        self.p=0
+        self.p = 0
         # self.logp(f"setting active {self.active}")
 
     def set_image(self, msg, key):
 
         # if self.p % self.hz == 0:
-            # self.get_logger().info(f"Received image from {key}")
+        # self.get_logger().info(f"Received image from {key}")
 
         # frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         # if it is compressed image,
@@ -78,10 +80,11 @@ class Base(Node):
 
     def set_period(self):
         def fn():
-            self.p+=1
-        self.period_timer = self.create_timer(1/self.hz, fn)
+            self.p += 1
 
-    def logp(self,desc):
+        self.period_timer = self.create_timer(1 / self.hz, fn)
+
+    def logp(self, desc):
         if self.p % self.hz == 0:
             self.get_logger().info(desc)
 

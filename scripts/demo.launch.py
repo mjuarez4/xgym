@@ -7,8 +7,7 @@ import rclpy
 from rclpy.executors import MultiThreadedExecutor
 from tqdm import tqdm
 
-from xgym.nodes import (Camera, FootPedal, Gello, Governor, Xarm,
-                        SpaceMouse, Writer)
+from xgym.nodes import Camera, FootPedal, Gello, Governor, Xarm, SpaceMouse, Writer
 
 # import atexit
 # import signal

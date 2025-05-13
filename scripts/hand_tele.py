@@ -13,16 +13,19 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
 from bsuite.utils.gym_wrapper import DMEnvFromGym, GymFromDMEnv
-from envlogger.backends.tfds_backend_writer import \
-    TFDSBackendWriter as TFDSWriter
+from envlogger.backends.tfds_backend_writer import TFDSBackendWriter as TFDSWriter
 from envlogger.testing import catch_env
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from pynput import keyboard
 from tqdm import tqdm
 
-from xgym.controllers import (HamerController, KeyboardController,
-                              ModelController, ScriptedController,
-                              SpaceMouseController)
+from xgym.controllers import (
+    HamerController,
+    KeyboardController,
+    ModelController,
+    ScriptedController,
+    SpaceMouseController,
+)
 from xgym.gyms import Base, Lift, Stack
 from xgym.utils import boundary as bd
 from xgym.utils import camera as cu
@@ -100,7 +103,7 @@ def main(cfg: RunCFG):
         delta = np.zeros(7)
         k0 = np.zeros((21, 3))
         fingermin = 1e3
-        fingermax = 1e-8 
+        fingermax = 1e-8
 
         for _ in tqdm(range(int(cfg.nsteps) * freq), desc=f"EP{ep}"):  # 3 episodes
 
@@ -134,7 +137,6 @@ def main(cfg: RunCFG):
                 k0 = kp
 
                 delta = delta.mean(0)  # was palm 0 now mean
-
 
                 print(kp)
                 print(kp.shape)

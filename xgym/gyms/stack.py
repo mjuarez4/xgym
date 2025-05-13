@@ -89,7 +89,6 @@ class Stack(Base):
         time.sleep(1)
         return ret
 
-
     def wait_proceed(self):
         while not self._proceed:
             time.sleep(0.1)

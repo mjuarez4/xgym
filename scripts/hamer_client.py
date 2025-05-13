@@ -22,6 +22,7 @@ class Config:
 from mano_pipe_v3 import remap_keys, select_keys, solve_2d
 import jax
 
+
 def main(cfg: Config):
     pprint(cfg)
 
@@ -61,7 +62,6 @@ def main(cfg: Config):
         key = cv2.waitKey(1)
         if key == ord("q"):
             break
-
 
 
 if __name__ == "__main__":

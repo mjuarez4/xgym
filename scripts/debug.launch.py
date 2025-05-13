@@ -52,9 +52,10 @@ def main(cfg: RunCFG):
     nodes = {
         "robot": RobotNode(joint_ctrl=cfg.gello),
         # 'viewer': FastImageViewer(active=False),
-        "controller": SpaceMouseNode() if cfg.gello is False else GelloNode(GelloArgs()),
+        "controller": (
+            SpaceMouseNode() if cfg.gello is False else GelloNode(GelloArgs())
+        ),
         # "writer" : Writer(),
-
     }
 
     """

@@ -16,7 +16,7 @@ class SpaceMouse(Node):
         self.controller = SpaceMouseController()
 
         self.hz = 300
-        self.timer = self.create_timer(1/self.hz, self.publish_command)
+        self.timer = self.create_timer(1 / self.hz, self.publish_command)
 
         self.get_logger().info("Controller Node Initialized.")
 

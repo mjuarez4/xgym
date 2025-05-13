@@ -17,8 +17,7 @@ import tyro
 import xgym
 from flax.traverse_util import flatten_dict
 from jax import numpy as jnp
-from lerobot.common.datasets.lerobot_dataset import \
-    HF_LEROBOT_HOME as LEROBOT_HOME
+from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME as LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from rich.pretty import pprint
 from tqdm import tqdm
@@ -103,7 +102,7 @@ def create(
 ) -> LeRobotDataset:
     """defines and creates the dataset using the first step"""
 
-    motors = MOTORS[robot_type]
+    # motors = MOTORS[robot_type]
 
     cameras = example["observation"]["image"].keys()
 
@@ -119,6 +118,7 @@ def create(
         POSEQ = ["x", "y", "z", "qw", "qx", "qy", "qz"]
 
         LANG = None
+        MANO = None  # TODO fix later
 
     NAMES = {
         "observation": {
@@ -141,10 +141,12 @@ def create(
     def make_spec(k, arr):
         key = ".".join([str(_k.key) for _k in k])
         dtype = arr.dtype.name if "image" not in key else mode
+        names = flatten_dict(NAMES, sep=".").get(key)
+
         return {
             "dtype": dtype,
             "shape": arr.shape,
-            "names": flatten_dict(NAMES, sep=".")[key].value,
+            **({"names": names.value} if names is not None else {}),
         }
 
     features = flatten_dict(example, sep=".")

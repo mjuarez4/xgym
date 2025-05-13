@@ -5,8 +5,12 @@ import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from rclpy.node import Node
-from rclpy.qos import (QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy,
-                       ReliabilityPolicy)
+from rclpy.qos import (
+    QoSDurabilityPolicy,
+    QoSProfile,
+    QoSReliabilityPolicy,
+    ReliabilityPolicy,
+)
 from sensor_msgs.msg import CompressedImage, Image, JointState
 from std_msgs.msg import Bool, Float32MultiArray, String
 from xarm_msgs.msg import CIOState, RobotMsg
@@ -86,7 +90,6 @@ class FastImageViewer(Node):
         self.hz = 10
         self.timer = self.create_timer(1 / self.hz, self.show)
 
-
     def list_camera_topics(self):
         topics = self.get_topic_names_and_types()
         cams = [t for t, types in topics if "camera" in t]
@@ -129,7 +132,9 @@ class FastImageViewer(Node):
             return
         else:
             print("showing")
-            print({k:(v.shape,v.dtype) for k,v in self.data.items() if v is not None})
+            print(
+                {k: (v.shape, v.dtype) for k, v in self.data.items() if v is not None}
+            )
             return
 
         """

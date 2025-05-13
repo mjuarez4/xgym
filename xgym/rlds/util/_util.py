@@ -51,6 +51,7 @@ def perspective_projection(focal_length, H, W):
     )
     return P
 
+
 def apply_persp(points, mat):
     points_hom = add_col(points)  # 4d
     bs = points_hom.shape[0]

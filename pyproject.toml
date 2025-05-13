@@ -33,6 +33,7 @@ dependencies = [
 ctrl = [
     "gello>=0.0.1",
     "pyspacemouse>=1.1.4",
+    "pyudev>=0.24.3",
     "pyzmq>=26.4.0",
     "xarm-python-sdk>=1.15.1",
 ]

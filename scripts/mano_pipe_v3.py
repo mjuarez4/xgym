@@ -12,8 +12,15 @@ from tqdm import tqdm
 
 from xgym import MANO_1, MANO_1DONE, MANO_2, MANO_4
 from xgym.model_controllers import HamerController
-from xgym.rlds.util import (add_col, apply_persp, apply_uv, apply_xyz,
-                            perspective_projection, remove_col, solve_uv2xyz)
+from xgym.rlds.util import (
+    add_col,
+    apply_persp,
+    apply_uv,
+    apply_xyz,
+    perspective_projection,
+    remove_col,
+    solve_uv2xyz,
+)
 from xgym.rlds.util.render import render_openpose
 from xgym.rlds.util.transform import center_crop
 
@@ -222,6 +229,7 @@ def main(cfg: MultiServerCN):
                 return out
 
             from concurrent.futures import ThreadPoolExecutor
+
             servergen = (servers[i % len(servers)] for i in range(len(v)))
 
             # requests might be queued

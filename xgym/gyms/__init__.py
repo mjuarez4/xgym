@@ -29,7 +29,6 @@ register(
 )
 
 
-
 TASKS = OrderedDict(
     (
         # (

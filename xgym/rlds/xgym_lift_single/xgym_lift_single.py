@@ -38,7 +38,7 @@ class XgymLiftSingle(tfds.core.GeneratorBasedBuilder):
                                                 dtype=np.uint8,
                                                 encoding_format="png",
                                                 doc="Low front logitech camera RGB observation.",
-                                                ),
+                                            ),
                                             "side": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,

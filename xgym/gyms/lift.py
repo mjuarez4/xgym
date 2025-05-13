@@ -13,7 +13,7 @@ from xgym.utils.boundary import PartialRobotState as RS
 
 
 class Lift(Base):
-    def __init__(self, manual=False, out_dir=".", random=True, space='cartesian'):
+    def __init__(self, manual=False, out_dir=".", random=True, space="cartesian"):
         super().__init__(out_dir=out_dir, space=space)
 
         assert manual in [True, False]
@@ -76,9 +76,9 @@ class Lift(Base):
                     25 * np.random.choice([-12, -8, -4, 0, 4, 8, 12]),
                     25 * np.random.choice([-7.5, -7, -6, -5, -4, -2, 0, 4, 8]),
                     # new random rot and gripper
-                    np.pi/8 * np.random.rand(),
-                    np.pi/8 * np.random.rand(),
-                    np.pi/8 * np.random.rand(),
+                    np.pi / 8 * np.random.rand(),
+                    np.pi / 8 * np.random.rand(),
+                    np.pi / 8 * np.random.rand(),
                     np.random.rand(),
                 ]
             )

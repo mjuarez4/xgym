@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import cv2
+
 # import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
@@ -110,7 +111,6 @@ def view(data):
         # cv2.waitKey(300)
         # cv2.waitKey(0)
 
-
     """
     # import matplotlib
     # matplotlib.use('Agg')
@@ -156,7 +156,7 @@ def view(data):
     """
 
     # iif cv2.waitKey(0) & 0xFF == ord("q"):
-        # plt.clf()
-        # plt.close("all")
-        # icv2.destroyWindow()
-    print('CLOSED')
+    # plt.clf()
+    # plt.close("all")
+    # icv2.destroyWindow()
+    print("CLOSED")

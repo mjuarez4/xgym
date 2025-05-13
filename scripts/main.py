@@ -11,13 +11,11 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
 from bsuite.utils.gym_wrapper import DMEnvFromGym, GymFromDMEnv
-from envlogger.backends.tfds_backend_writer import \
-    TFDSBackendWriter as TFDSWriter
+from envlogger.backends.tfds_backend_writer import TFDSBackendWriter as TFDSWriter
 from envlogger.testing import catch_env
 from pynput import keyboard
 
-from xgym.controllers import (KeyboardController, ModelController,
-                              ScriptedController)
+from xgym.controllers import KeyboardController, ModelController, ScriptedController
 from xgym.gyms import Base
 from xgym.utils import boundary as bd
 from xgym.utils.boundary import PartialRobotState as RS
@@ -82,11 +80,11 @@ def main():
     """
     env = _env
 
-    for _ in tqdm(range(3)): # 3 episodes
+    for _ in tqdm(range(3)):  # 3 episodes
 
         obs = env.reset()
         print(f"entering loop")
-        for i in tqdm(range(5),leave=False):
+        for i in tqdm(range(5), leave=False):
             time.sleep(0.01)
 
             # action = controller(obs)

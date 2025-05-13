@@ -6,8 +6,10 @@ from pprint import pprint
 from typing import Any, Dict, Optional
 
 import jax
+
 # import keyboard
 import numpy as np
+
 # spacemouse imports
 import requests
 

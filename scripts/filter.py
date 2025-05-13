@@ -28,7 +28,7 @@ def filter_episodes(dataset, path, filtered):
             continue  # already in yes
 
         if len(ep["steps"]) > 7:
-            _f['no'].append(i)
+            _f["no"].append(i)
 
         for j, step in enumerate(ep["steps"]):
 
@@ -41,10 +41,10 @@ def filter_episodes(dataset, path, filtered):
         # Ask the user if they want to keep this episode
         # if cv2 waitkey is y, keep the episode if n discard the episode
         if cv2.waitKey(0) == ord("y"):
-            _f['yes'].append(i)
+            _f["yes"].append(i)
             print(f"Episode {i} kept.")
         else:
-            _f['no'].append(i)
+            _f["no"].append(i)
             print(f"Episode {i} discarded.")
 
     return _f
@@ -122,19 +122,18 @@ def main():
         print(f"Error loading filtered episodes: {e}")
         filtered = {}
 
-    print( filtered ) 
+    print(filtered)
 
     paths = list(glob.glob(inpath))
     for p in tqdm(paths):
-        f =  filtered.get(p, {}) 
+        f = filtered.get(p, {})
         if f == "err":
             continue
 
         yes = f.get("yes", [])
         no = f.get("no", [])
         # yes must not include elements in no
-        f['yes'] = list(set(yes) - set(no))
-
+        f["yes"] = list(set(yes) - set(no))
 
         try:
             dataset = tfds.builder_from_directory(p).as_dataset(split="all")
@@ -150,8 +149,8 @@ def main():
         if f == {}:
             f = _f
         else:
-            f['yes'] = list(set(f['yes'] + _f['yes']))
-            f['no'] = list(set(f['no'] + _f['no']))
+            f["yes"] = list(set(f["yes"] + _f["yes"]))
+            f["no"] = list(set(f["no"] + _f["no"]))
 
         filtered[p] = f
 
@@ -160,14 +159,11 @@ def main():
         with open(filterpath, "w") as f:
             json.dump(filtered, f)
 
-
     for p in paths:
         # remove dir where value is err
         if filtered[p] == "err":
             print(f"Removing {p}")
             os.system(f"rm -rf {p}")
-
-
 
     quit()
 

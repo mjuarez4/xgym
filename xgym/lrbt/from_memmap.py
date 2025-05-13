@@ -15,15 +15,21 @@ import torch
 import tyro
 from flax.traverse_util import flatten_dict
 from jax import numpy as jnp
-from lerobot.common.datasets.lerobot_dataset import \
-    HF_LEROBOT_HOME as LEROBOT_HOME
+from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME as LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from rich.pretty import pprint
 from tqdm import tqdm
 
 import xgym
-from xgym.lrbt.convert import (DEFAULT_DATASET_CONFIG, FRAME_MODE, MOTORS,
-                               DatasetConfig, Embodiment, Task, create)
+from xgym.lrbt.convert import (
+    DEFAULT_DATASET_CONFIG,
+    FRAME_MODE,
+    MOTORS,
+    DatasetConfig,
+    Embodiment,
+    Task,
+    create,
+)
 from xgym.rlds.util import add_col, remove_col
 from xgym.rlds.util.render import render_openpose
 from xgym.rlds.util.trajectory import binarize_gripper_actions, scan_noop
@@ -31,6 +37,7 @@ from xgym.viz.mano import overlay_palm, overlay_pose
 
 
 np.set_printoptions(suppress=True, precision=3)
+
 
 @dataclass
 class Config:
@@ -82,8 +89,8 @@ def main(cfg: Config):
             continue
         pprint(spec(ep))
 
-        leader = ep['gello_joints']
-        leader_grip = leader[:,-1:]
+        leader = ep["gello_joints"]
+        leader_grip = leader[:, -1:]
         # pprint(leader_grip)
 
         n = len(ep["time"])
@@ -93,7 +100,7 @@ def main(cfg: Config):
                 "proprio": {k.split("_")[-1]: ep[k] for k in ep if "xarm" in k},
             },
         }
-        steps['observation']['proprio']['gripper'] = leader_grip
+        steps["observation"]["proprio"]["gripper"] = leader_grip
         pprint(spec(steps))
 
         # steps = [x for x in ep["steps"]]
@@ -114,7 +121,7 @@ def main(cfg: Config):
         obs = steps.pop("observation")
         img = obs.pop("image")
 
-        for k in ['overhead','high']:
+        for k in ["overhead", "high"]:
             if k in img:
                 img.pop(k)
                 # img["high"] = img.pop("overhead")
@@ -127,13 +134,12 @@ def main(cfg: Config):
         # force to be joint actions
         state = obs.pop("proprio")
         # state['gripper'] /= 850 # no because we use leader grip
-        state['position'] = state.pop('pose') / 1e3
+        state["position"] = state.pop("pose") / 1e3
         obs["state"] = state
 
-
         # steps["action"] = jax.tree.map(
-                # lambda x: np.concatenate([x[:, 1:], x[:, -1:]], axis=-1), state
-                # )
+        # lambda x: np.concatenate([x[:, 1:], x[:, -1:]], axis=-1), state
+        # )
         # pprint(spec(steps["action"]))
 
         steps["observation"] = obs

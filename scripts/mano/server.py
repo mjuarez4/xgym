@@ -11,8 +11,7 @@ import numpy as np
 import torch
 import tyro
 from hamer.configs import CACHE_DIR_HAMER
-from hamer.models import (DEFAULT_CHECKPOINT, HAMER, MANO, download_models,
-                          load_hamer)
+from hamer.models import DEFAULT_CHECKPOINT, HAMER, MANO, download_models, load_hamer
 from hamer.utils import SkeletonRenderer, recursive_to
 from hamer.utils.renderer import Renderer, cam_crop_to_full
 from jax import numpy as jnp
@@ -20,7 +19,8 @@ from rich.pretty import pprint
 
 from array_util import stack_and_pad
 from util import infer, init_detector
-from vitpose_model import ViTPoseModel
+
+# from vitpose_model import ViTPoseModel
 from webpolicy.deploy.base_policy import BasePolicy
 from webpolicy.deploy.server import WebsocketPolicyServer as Server
 
@@ -53,8 +53,6 @@ def unnormalize(img):
     return (np.clip(img, 0, 1) * 255).astype(np.uint8)
 
 
-
-
 class Policy(BasePolicy):
 
     def __init__(self, cfg):
@@ -80,7 +78,7 @@ class Policy(BasePolicy):
         )  # Setup the renderer
         self.skrenderer = SkeletonRenderer(self.model_cfg)
 
-        print('policy init done')
+        print("policy init done")
         # torch models dont compile... so we are done
 
     def reset(self):
@@ -165,7 +163,7 @@ def main(cfg: Config):
         port=cfg.port,
         metadata=None,
     )
-    print('serving on', cfg.host, cfg.port)
+    print("serving on", cfg.host, cfg.port)
     server.serve_forever()
 
 
