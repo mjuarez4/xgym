@@ -17,8 +17,7 @@ import tensorflow_datasets as tfds
 import tyro
 from flax.traverse_util import flatten_dict
 from jax import numpy as jnp
-from lerobot.common.datasets.lerobot_dataset import \
-    HF_LEROBOT_HOME as LEROBOT_HOME
+from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME as LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from rich.pretty import pprint
 from tqdm import tqdm
@@ -64,15 +63,15 @@ class BaseReaderConfig:
 
 @dataclass(frozen=True)
 class DatasetConfig:
-    use_videos: bool = False # True
+    use_videos: bool = False  # True
     tolerance_s: float = 0.0001
     image_writer_processes: int = 16
     image_writer_threads: int = 8
-    video_backend: str | None = None # 'h264_nvenc'
+    video_backend: str | None = None  # 'h264_nvenc'
 
 
 DEFAULT_DATASET_CONFIG = DatasetConfig()
-FRAME_MODE = 'video' if DEFAULT_DATASET_CONFIG.use_videos else 'image'
+FRAME_MODE = "video" if DEFAULT_DATASET_CONFIG.use_videos else "image"
 
 MOTORS = {
     "aloha": [
@@ -105,7 +104,7 @@ def create(
 ) -> LeRobotDataset:
     """defines and creates the dataset using the first step"""
 
-    motors = MOTORS[robot_type]
+    # motors = MOTORS[robot_type]
 
     cameras = example["observation"]["image"].keys()
 
@@ -121,6 +120,7 @@ def create(
         POSEQ = ["x", "y", "z", "qw", "qx", "qy", "qz"]
 
         LANG = None
+        MANO = None # TODO fix later
 
     NAMES = {
         "observation": {
@@ -133,7 +133,7 @@ def create(
             "state": {
                 "gripper": Name.GRIPPER,
                 "joints": Name.DOF7,
-                "position": Name.POSE, # TODO fix
+                "position": Name.POSE,  # TODO fix
                 # "pose": Name.POSE, # throw hf error?
             },
         },
@@ -143,10 +143,12 @@ def create(
     def make_spec(k, arr):
         key = ".".join([str(_k.key) for _k in k])
         dtype = arr.dtype.name if "image" not in key else mode
+        names= flatten_dict(NAMES, sep=".").get(key)
+
         return {
             "dtype": dtype,
             "shape": arr.shape,
-            "names": flatten_dict(NAMES, sep=".")[key].value,
+            **({"names": names.value} if names is not None else {} ),
         }
 
     features = flatten_dict(example, sep=".")
@@ -271,9 +273,9 @@ def main(cfg: BaseReaderConfig):
 
         # force to be joint actions
         state = obs.pop("proprio")
-        state = np.concatenate([state["joints"],state['gripper']], axis=-1)
+        state = np.concatenate([state["joints"], state["gripper"]], axis=-1)
         obs["state"] = state
-        steps['action'] = state
+        steps["action"] = state
         pprint(steps["action"].shape)
 
         steps["observation"] = obs
@@ -284,12 +286,8 @@ def main(cfg: BaseReaderConfig):
         }
         steps["lang"] = lang["lang"]
 
-
-
         # pprint(spec(steps))
         step0 = take(steps, 0)
-
-
 
         if dataset is None:
             pprint(spec(step0))
@@ -307,7 +305,6 @@ def main(cfg: BaseReaderConfig):
             step = jax.tree.map(lambda x: torch.from_numpy(x).float(), step)
             dataset.add_frame(step | {"task": task})
         dataset.save_episode()
-
 
     tags = []
     dataset.push_to_hub(
