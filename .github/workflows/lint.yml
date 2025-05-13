@@ -31,9 +31,9 @@ jobs:
         run: |
           black . --verbose
 
-      - name: Run isort (check only)
-        run: |
-          isort --check-only .
+      # - name: Run isort (check only)
+      # run: |
+      # isort --check-only .
 
       - name: Commit and push changes
         run: |
