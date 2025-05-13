@@ -15,21 +15,28 @@ import numpy as np
 import torch
 import tyro
 from hamer.configs import CACHE_DIR_HAMER
-from hamer.datasets.vitdet_dataset import (DEFAULT_MEAN, DEFAULT_STD,
-                                           ViTDetDataset)
-from hamer.models import (DEFAULT_CHECKPOINT, HAMER, MANO, download_models,
-                          load_hamer)
+from hamer.datasets.vitdet_dataset import DEFAULT_MEAN, DEFAULT_STD, ViTDetDataset
+from hamer.models import DEFAULT_CHECKPOINT, HAMER, MANO, download_models, load_hamer
 from hamer.utils import SkeletonRenderer, recursive_to
 from hamer.utils.geometry import perspective_projection
 from hamer.utils.render_openpose import render_openpose
 from hamer.utils.renderer import Renderer, cam_crop_to_full
 from PIL import Image
-from smplx.utils import (Array, MANOOutput, SMPLHOutput, SMPLOutput,
-                         SMPLXOutput, Struct, Tensor, to_np, to_tensor)
+from smplx.utils import (
+    Array,
+    MANOOutput,
+    SMPLHOutput,
+    SMPLOutput,
+    SMPLXOutput,
+    Struct,
+    Tensor,
+    to_np,
+    to_tensor,
+)
 from tqdm import tqdm
 
 from log import logger
-from vitpose_model import ViTPoseModel
+# from vitpose_model import ViTPoseModel
 
 # from manotorch.manolayer import ManoLayer, MANOOutput
 

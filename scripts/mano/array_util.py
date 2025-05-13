@@ -17,6 +17,7 @@ def stack_and_pad(history: deque, num_obs: int):
     full_obs["timestep_pad_mask"] = timestep_pad_mask
     return full_obs
 
+
 def keyp2bbox(keyp):
     """get bounding box from keypoints
     the boxes are returned in the format [x1, y1, x2, y2]
