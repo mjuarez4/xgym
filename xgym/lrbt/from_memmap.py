@@ -54,7 +54,13 @@ def main(cfg: Config):
     times = []
 
     # task = "embodiment:Human, task:pick up the red block"  # hardcoded for now
-    taskfile = next(Path(cfg.dir).glob("*.npy"))
+    try:
+        taskfile = list(Path(cfg.dir).glob("*.npy"))[0]
+    except IndexError as e:
+        xgym.logger.error(f"Error finding task file {e}")
+        xgym.logger.error("Make sure there is a f'task-{name}.npy' file in the dir")
+        raise e
+
     _task = taskfile.stem.replace("_", " ")
     _lang = np.load(taskfile)
 

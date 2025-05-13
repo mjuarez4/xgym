@@ -1,8 +1,6 @@
 import enum
-from copy import deepcopy
-
-import torch
 import shutil
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Union
@@ -14,7 +12,9 @@ import jax.numpy as jnp
 import lerobot
 import numpy as np
 import tensorflow_datasets as tfds
+import torch
 import tyro
+import xgym
 from flax.traverse_util import flatten_dict
 from jax import numpy as jnp
 from lerobot.common.datasets.lerobot_dataset import \
@@ -22,8 +22,6 @@ from lerobot.common.datasets.lerobot_dataset import \
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from rich.pretty import pprint
 from tqdm import tqdm
-
-import xgym
 from xgym.rlds.util import add_col, remove_col
 from xgym.rlds.util.render import render_openpose
 from xgym.rlds.util.trajectory import binarize_gripper_actions, scan_noop
@@ -64,15 +62,15 @@ class BaseReaderConfig:
 
 @dataclass(frozen=True)
 class DatasetConfig:
-    use_videos: bool = False # True
+    use_videos: bool = False  # True
     tolerance_s: float = 0.0001
     image_writer_processes: int = 16
     image_writer_threads: int = 8
-    video_backend: str | None = None # 'h264_nvenc'
+    video_backend: str | None = None  # 'h264_nvenc'
 
 
 DEFAULT_DATASET_CONFIG = DatasetConfig()
-FRAME_MODE = 'video' if DEFAULT_DATASET_CONFIG.use_videos else 'image'
+FRAME_MODE = "video" if DEFAULT_DATASET_CONFIG.use_videos else "image"
 
 MOTORS = {
     "aloha": [
@@ -133,7 +131,7 @@ def create(
             "state": {
                 "gripper": Name.GRIPPER,
                 "joints": Name.DOF7,
-                "position": Name.POSE, # TODO fix
+                "position": Name.POSE,  # TODO fix
                 # "pose": Name.POSE, # throw hf error?
             },
         },
@@ -271,9 +269,9 @@ def main(cfg: BaseReaderConfig):
 
         # force to be joint actions
         state = obs.pop("proprio")
-        state = np.concatenate([state["joints"],state['gripper']], axis=-1)
+        state = np.concatenate([state["joints"], state["gripper"]], axis=-1)
         obs["state"] = state
-        steps['action'] = state
+        steps["action"] = state
         pprint(steps["action"].shape)
 
         steps["observation"] = obs
@@ -284,12 +282,8 @@ def main(cfg: BaseReaderConfig):
         }
         steps["lang"] = lang["lang"]
 
-
-
         # pprint(spec(steps))
         step0 = take(steps, 0)
-
-
 
         if dataset is None:
             pprint(spec(step0))
@@ -307,7 +301,6 @@ def main(cfg: BaseReaderConfig):
             step = jax.tree.map(lambda x: torch.from_numpy(x).float(), step)
             dataset.add_frame(step | {"task": task})
         dataset.save_episode()
-
 
     tags = []
     dataset.push_to_hub(
