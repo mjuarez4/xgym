@@ -10,14 +10,12 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
 from bsuite.utils.gym_wrapper import DMEnvFromGym, GymFromDMEnv
-from envlogger.backends.tfds_backend_writer import \
-    TFDSBackendWriter as TFDSWriter
+from envlogger.backends.tfds_backend_writer import TFDSBackendWriter as TFDSWriter
 from envlogger.testing import catch_env
 from pynput import keyboard
 from tqdm import tqdm
 
-from xgym.controllers import (KeyboardController, ModelController,
-                              ScriptedController)
+from xgym.controllers import KeyboardController, ModelController, ScriptedController
 from xgym.gyms import Base, Stack
 from xgym.utils import boundary as bd
 from xgym.utils.boundary import PartialRobotState as RS
@@ -90,16 +88,15 @@ def main():
             obs = env.reset()
             for _ in tqdm(range(50)):  # 3 episodes
 
-                print('\n'*3)
+                print("\n" * 3)
                 action = model(obs["img"]["camera_0"]).copy()
                 action[3:6] = 0
                 action[-1] *= 850
                 # action = action / 2
-                print(f'action')
+                print(f"action")
                 print(action.tolist())
                 env.render(mode="human")
                 obs, reward, done, info = env.step(action)
-
 
     _env.close()
 

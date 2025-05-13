@@ -36,6 +36,7 @@ from smplx.utils import (
 from tqdm import tqdm
 
 from log import logger
+
 # from vitpose_model import ViTPoseModel
 
 # from manotorch.manolayer import ManoLayer, MANOOutput

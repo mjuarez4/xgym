@@ -19,6 +19,7 @@ from rich.pretty import pprint
 
 from array_util import stack_and_pad
 from util import infer, init_detector
+
 # from vitpose_model import ViTPoseModel
 from webpolicy.deploy.base_policy import BasePolicy
 from webpolicy.deploy.server import WebsocketPolicyServer as Server

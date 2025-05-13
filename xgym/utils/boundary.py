@@ -36,7 +36,7 @@ def minimize(a: np.array) -> np.array:
 
 
 def minimize(a):
-    return np.mod(a, 2 * np.pi) 
+    return np.mod(a, 2 * np.pi)
 
 
 # @dataclass(frozen=True)
@@ -178,7 +178,7 @@ def is_angle_between(target, start, end, epsilon=0):
     start = start % (2 * np.pi)
     end = end % (2 * np.pi)
 
-    print('is_angle_between')
+    print("is_angle_between")
     print(np.array([start, target, end]).round(4))
     # Check if target is between start and end, handling wrap-around at 0
     if start < end:

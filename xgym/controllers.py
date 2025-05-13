@@ -1,4 +1,5 @@
 import json_numpy as jp
+
 jp.patch()
 import os
 import threading
@@ -10,9 +11,11 @@ from pprint import pprint
 from typing import Any, Dict, Optional
 
 import jax
+
 # import keyboard
 import numpy as np
 import pynput
+
 # spacemouse imports
 import pyspacemouse
 import requests
@@ -303,9 +306,6 @@ class ScriptedController(Controller):
 
     def update(self, obs, reward, truncated, terminated, info):
         self.action = 1
-
-
-
 
 
 def main():

@@ -13,10 +13,8 @@ from tqdm import tqdm
 
 import local
 import util
-from transforms import (center_crop, random_resized_crop, random_rot,
-                        random_xflip)
-from util import (add_col, apply_persp, apply_uv, apply_xyz, remove_col,
-                  solve_uv2xyz)
+from transforms import center_crop, random_resized_crop, random_rot, random_xflip
+from util import add_col, apply_persp, apply_uv, apply_xyz, remove_col, solve_uv2xyz
 
 
 def perspective_projection(focal_length, H, W):

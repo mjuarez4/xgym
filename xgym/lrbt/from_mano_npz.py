@@ -73,6 +73,7 @@ from xgym.rlds.util import (
 
 np.set_printoptions(suppress=True, precision=3)
 
+
 def spec(thing: dict[str, np.ndarray]):
     """Returns the shape of each key in the dict."""
     return jax.tree.map(lambda x: x.shape, thing)
@@ -161,6 +162,7 @@ class NPZVideoReader:
     def read(self):
         return self.__next__()
 
+
 # 4x4 matx
 T_xflip = np.array(
     [
@@ -172,26 +174,30 @@ T_xflip = np.array(
     dtype=np.float32,
 )
 
+
 @dataclass
 class Source:
     pass
 
+
 @dataclass
 class Camera(Source):
-    idx: int=3 # the camera idx to use
+    idx: int = 3  # the camera idx to use
+
 
 @dataclass
 class File(Source):
-    dir: str 
+    dir: str
 
     # typ: Literal["mp4", "npz"] = "npz" # the type of video file
+
 
 @dataclass
 class HamerConfig:
     host: str
     port: int
 
-    # src: Camera | File 
+    # src: Camera | File
     # cam: int = 3  # the camera idx to use
     # mode: Mode = Mode.CAM  # the mode to use, either CAM or FILE
 
@@ -230,14 +236,15 @@ def select_keys(out: dict):
     ]
     return {k: out[k] for k in keep if k in out}
 
-def postprocess(out:dict,frame:np.ndarray):
+
+def postprocess(out: dict, frame: np.ndarray):
 
     out = jax.tree.map(lambda x: x.copy(), out)
     out = remap_keys(out)
     box = {
         "center": out["box_center"][0],
         "size": out["box_size"][0],
-        "kp2d": out.pop("keypoints_2d")[0], # only relevant to box
+        "kp2d": out.pop("keypoints_2d")[0],  # only relevant to box
     }
 
     right = bool(out["right"][0])
@@ -254,15 +261,16 @@ def postprocess(out:dict,frame:np.ndarray):
     f = out["scaled_focal_length"]
     P = perspective_projection(f, H=frame.shape[0], W=frame.shape[1])
     points2d = apply_persp(out["keypoints_3d"], P)[0, :, :-1]
-    out['kp2d'] = points2d
-    out['kp3d'] = out.pop("keypoints_3d")
+    out["kp2d"] = points2d
+    out["kp3d"] = out.pop("keypoints_3d")
 
-    out = out | {'box': box}
+    out = out | {"box": box}
     squeeze = lambda arr: jax.tree.map(lambda x: x.squeeze(), arr)
     out = squeeze(out)
 
     def maybe_unsqueeze(x):
         return x.reshape((-1)) if x.ndim <= 1 else x
+
     out = jax.tree.map(maybe_unsqueeze, out)
     out = jax.tree.map(lambda x: x.astype(np.float32), out)
 
@@ -273,13 +281,13 @@ def postprocess(out:dict,frame:np.ndarray):
 class MyConfig(Config):
     hamer: HamerConfig = field(default_factory=HamerConfig)
 
+
 def main(cfg: MyConfig):
 
     root = Path(cfg.dir)
     ds = list(root.rglob("ep*.npz"))
 
     take = lambda tree, _i: jax.tree.map(lambda x: x[_i], tree)
-        
 
     times = []
 
@@ -295,14 +303,14 @@ def main(cfg: MyConfig):
         client = WebsocketClientPolicy(host=cfg.hamer.host, port=cfg.hamer.port)
         ep = np.load(f, allow_pickle=True)
         ep = {k: v for k, v in ep.items()}
-        frames = ep['low'] # cant use side frame rn
+        frames = ep["low"]  # cant use side frame rn
 
         # frame = cu.square(frame)
         # frame = cv2.resize(frame, (224, 224))
 
         n = len(frames)
         steps = []
-        for frame in tqdm(frames,leave=False):
+        for frame in tqdm(frames, leave=False):
             pack = {"img": frame}
             out = client.infer(pack)
             if out is None:
@@ -313,12 +321,11 @@ def main(cfg: MyConfig):
 
             step = {
                 "observation": {
-                    "image": { 'low': img, 'wrist': wrist },
-                    "state":  out ,
+                    "image": {"low": img, "wrist": wrist},
+                    "state": out,
                 }
             }
             steps.append(step)
-
 
         steps = jax.tree.map(lambda *_x: np.stack(_x, axis=0), *steps)
 
@@ -328,7 +335,7 @@ def main(cfg: MyConfig):
         obs = steps.pop("observation")
 
         img = obs.pop("image")
-        img = jax.tree.map(lambda x: x / 255, img) # to encode as mp4 with ffmpeg
+        img = jax.tree.map(lambda x: x / 255, img)  # to encode as mp4 with ffmpeg
         obs["image"] = img
 
         steps["observation"] = obs
@@ -374,7 +381,7 @@ def main(cfg: MyConfig):
 
     tags = []
     dataset.push_to_hub(
-            # **({'branch':cfg.branch} if cfg.branch else {}),
+        # **({'branch':cfg.branch} if cfg.branch else {}),
         tags=tags,
         private=False,
         push_videos=True,

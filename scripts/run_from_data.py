@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 import cv2
 import draccus
+
 # import envlogger
 import gymnasium as gym
 import jax
@@ -12,14 +13,14 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
 from bsuite.utils.gym_wrapper import DMEnvFromGym, GymFromDMEnv
+
 # from envlogger.backends.tfds_backend_writer import \
 # TFDSBackendWriter as TFDSWriter
 # from envlogger.testing import catch_env
 from pynput import keyboard
 from tqdm import tqdm
 
-from xgym.controllers import (KeyboardController, ModelController,
-                              ScriptedController)
+from xgym.controllers import KeyboardController, ModelController, ScriptedController
 from xgym.gyms import Base, Lift, Stack
 from xgym.utils import boundary as bd
 from xgym.utils import camera as cu
@@ -47,21 +48,20 @@ def new_target(target, action):
     return target
 
 
-
 def action_from_target(target, env):
-    clean = lambda x: np.mod(np.abs(x) , 2 * np.pi) * np.sign(x)
+    clean = lambda x: np.mod(np.abs(x), 2 * np.pi) * np.sign(x)
     pos = env.position.to_vector()
     pos[3:6] = clean(pos[3:6])
     action = target - pos
     action[-1] = target[-1]
 
-    # action[3:6] = 
+    # action[3:6] =
 
     return action
 
 
 def make_target(env):
-    clean = lambda x: np.mod(np.abs(x) , 2 * np.pi) * np.sign(x)
+    clean = lambda x: np.mod(np.abs(x), 2 * np.pi) * np.sign(x)
     target = env.position.to_vector()
     target[3:6] = clean(target[3:6])
     target[-1] = 0.95
@@ -169,7 +169,7 @@ def main():
                 print(action.round(3))
 
                 obs, reward, done, info = env.step(action)
-                time.sleep(3*dt)
+                time.sleep(3 * dt)
                 # toc = time.time()
                 # elapsed = toc - tic
                 # time.sleep(max(0, dt - elapsed))  # 5hz

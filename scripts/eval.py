@@ -66,7 +66,7 @@ def main(cfg: RunCFG):
 
     for ep in tqdm(range(100), desc="Episodes"):
         obs = env.reset()
-        env.set_mode(7) if env.space == 'cartesian' else env.set_mode(0)
+        env.set_mode(7) if env.space == "cartesian" else env.set_mode(0)
         time.sleep(0.4)
         env.start_record()
 

@@ -1,5 +1,12 @@
-from .import camera
+from . import camera
 from xgym.utils.logger import logger
-from xgym.utils.boundary import (AND, NOT, OR, Boundary, CartesianBoundary,
-                                 CompositeBoundary, JointBoundary,
-                                 PartialRobotState)
+from xgym.utils.boundary import (
+    AND,
+    NOT,
+    OR,
+    Boundary,
+    CartesianBoundary,
+    CompositeBoundary,
+    JointBoundary,
+    PartialRobotState,
+)

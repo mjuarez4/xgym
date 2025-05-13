@@ -35,7 +35,7 @@ class XgymPlaySingle(tfds.core.GeneratorBasedBuilder):
                                                 dtype=np.uint8,
                                                 encoding_format="png",
                                                 doc="Front left anker camera RGB observation.",
-                                                ),
+                                            ),
                                             "front_r": tfds.features.Image(
                                                 shape=(224, 224, 3),
                                                 dtype=np.uint8,
@@ -198,7 +198,6 @@ class XgymPlaySingle(tfds.core.GeneratorBasedBuilder):
                 "window": ep["image"]["camera_0"],
                 "overhead": ep["image"]["camera_12"],
             }
-            
 
             episode = []
             n = len(ep["proprio"]["position"])

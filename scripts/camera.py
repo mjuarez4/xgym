@@ -14,15 +14,20 @@ import pandas as pd
 
 df = []
 for device in context.list_devices(subsystem="video4linux"):
-    df.append({
-        "path": device.device_node,
-        "serial": device.get("ID_SERIAL_SHORT"),
-        "model": device.get("ID_MODEL"),
-    })
+    df.append(
+        {
+            "path": device.device_node,
+            "serial": device.get("ID_SERIAL_SHORT"),
+            "model": device.get("ID_MODEL"),
+        }
+    )
 
 df = pd.DataFrame(df)
 # sort by int(path.split("/")[-1].replace("video", ""))
-df = df.sort_values(by="path", key=lambda x: x.str.split("/").str[-1].str.replace("video", "").astype(int))
+df = df.sort_values(
+    by="path",
+    key=lambda x: x.str.split("/").str[-1].str.replace("video", "").astype(int),
+)
 
 print(df)
 
@@ -58,7 +63,7 @@ def main():
         imgs = cu.writekeys(imgs)
 
         # resize by the biggest dimension of frames
-        imgs = cu.resize_all(list(imgs.values()),m=640)
+        imgs = cu.resize_all(list(imgs.values()), m=640)
         frame = np.concatenate(imgs, axis=1)
 
         if store:
@@ -94,6 +99,7 @@ def main():
 
 def realsense():
     from gello.cameras.realsense_camera import RealSenseCamera, get_device_ids
+
     device_ids = get_device_ids()
     rs = RealSenseCamera(flip=False, device_id=device_ids[0])
 
@@ -105,6 +111,7 @@ def realsense():
         cv2.imshow("depth", depth)
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
+
 
 if __name__ == "__main__":
     # realsense()

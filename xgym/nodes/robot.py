@@ -18,6 +18,7 @@ from xarm_msgs.srv import GetFloat32, GripperMove
 
 from .base import Base
 
+
 class Accelerator:
     def __init__(
         self,
@@ -79,8 +80,6 @@ class Accelerator:
             "acceleration": acceleration,
             "time": t,
         }
-
-
 
 
 class Xarm(Base):
@@ -212,12 +211,11 @@ class Xarm(Base):
         # _home["angle"] = np.array(_home["angle"]) # +noise
         return self._home
 
-
     def set_active(self, msg):
         super().set_active(msg)
 
         noise = np.random.normal(0, 0.01, size=len(self._home["angle"]))
-        self._home["angle"] = np.array(self._home["angle"]) # +noise
+        self._home["angle"] = np.array(self._home["angle"])  # +noise
         self.acc.velocity = np.zeros_like(self.acc.velocity)
 
     def gripper_callback(self):
@@ -346,15 +344,15 @@ class Xarm(Base):
             self.acc.velocity = np.zeros_like(self.joints)
         self.acc.position = self.joints
 
-        step = self.leader[:-1]  if self.active else self.home["angle"]
+        step = self.leader[:-1] if self.active else self.home["angle"]
         out = self.acc.step(step)
 
-        if self.p<self.hz: # velocity ramp during start
-            out['velocity'] = out['velocity'] * (self.p/self.hz)
+        if self.p < self.hz:  # velocity ramp during start
+            out["velocity"] = out["velocity"] * (self.p / self.hz)
 
         msg.displacements = out["position"].tolist()
         msg.joint_names = [self.joint_names[i] for i in range(len(self.leader[:-1]))]
-        msg.velocities =  out["velocity"].tolist()
+        msg.velocities = out["velocity"].tolist()
         self.jog_pub.publish(msg)
 
     def publish_xarm_state(self):
@@ -432,7 +430,7 @@ class Xarm(Base):
             # response = 50/diff # faster moves update quicker
             r = 0.1
             r = 4 / self.hz
-            
+
             self.leader = leader * (r) + self.leader * (1 - r)
             self.leader[-1] = leader[-1]  # no smoothing on gripper
 

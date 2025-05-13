@@ -8,8 +8,12 @@ import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from rclpy.node import Node
-from rclpy.qos import (QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy,
-                       ReliabilityPolicy)
+from rclpy.qos import (
+    QoSDurabilityPolicy,
+    QoSProfile,
+    QoSReliabilityPolicy,
+    ReliabilityPolicy,
+)
 from sensor_msgs.msg import CompressedImage, Image, JointState
 from std_msgs.msg import Bool, Float32MultiArray, String
 from xarm_msgs.msg import CIOState, RobotMsg
@@ -20,9 +24,10 @@ from .base import Base
 
 import xgym
 
+
 class Writer(Base):
 
-    def __init__(self,seconds=15):
+    def __init__(self, seconds=15):
         super().__init__("writer")
 
         self.t0 = time.time()
@@ -100,7 +105,7 @@ class Writer(Base):
                 "info": {
                     "hz": self.hz,
                     "len": self.datai,
-                    'maxlen': self.nrecord,
+                    "maxlen": self.nrecord,
                     "path": str(self.path),
                 },
             }
@@ -132,7 +137,7 @@ class Writer(Base):
                 "info": {
                     "hz": self.hz,
                     "len": self.datai,
-                    'maxlen': self.nrecord,
+                    "maxlen": self.nrecord,
                     "path": str(self.path),
                 },
             }

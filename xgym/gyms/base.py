@@ -16,6 +16,7 @@ _ = None
 import gymnasium as gym
 import numpy as np
 from gello.cameras.camera import CameraDriver
+
 # from misc.boundary import BoundaryManager
 from gello.cameras.realsense_camera import RealSenseCamera, get_device_ids
 from gello.data_utils.keyboard_interface import KBReset
@@ -459,25 +460,22 @@ class Base(gym.Env):
     @abstractmethod
     def _step(self, action, force_grip=False, wait=True):
 
-        if self.space == 'cartesian':
+        if self.space == "cartesian":
             assert len(action) == 7
             act = RS.from_vector(action)
             gripper = act.gripper
         else:
             gripper = action[-1]
 
-
-        if (
-            abs(gripper - self.gripper) > 0.05 or force_grip
-        ):  # save time?
+        if abs(gripper - self.gripper) > 0.05 or force_grip:  # save time?
             self.robot.set_gripper_position(gripper * self.GRIPPER_MAX, wait=False)
         else:
             logger.info("skipping gripper for speed")
 
-        if self.space == 'joint':
+        if self.space == "joint":
             # self._go_joints(self.position+ RS(joints=action[:-1]), relative=False, is_radian=True)
             self._go_joints(RS(joints=action[:-1]), relative=True, is_radian=True)
-            return # no cartesian move
+            return  # no cartesian move
 
         print(f"waiting: {wait}")
         if wait:
@@ -505,7 +503,7 @@ class Base(gym.Env):
                 yaw=act.aa[2] + pos.aa[2],
                 relative=False,
                 # speed=100 is default,
-                mvacc=1500, # 2000 appears to be default for cartesian
+                mvacc=1500,  # 2000 appears to be default for cartesian
                 wait=wait,
             )
 
@@ -586,7 +584,7 @@ class Base(gym.Env):
                 clipped = _clipped - self.position
                 clipped.gripper = _clipped.gripper
                 logger.warn(f"clipping action: A to B")
-                logger.warn(f"{action.round(4)}") # just np
+                logger.warn(f"{action.round(4)}")  # just np
                 logger.warn(f"{clipped.to_vector().round(4)}")
 
                 # logger.info(self.boundary.contains(self.position + clipped))

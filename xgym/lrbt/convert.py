@@ -120,7 +120,7 @@ def create(
         POSEQ = ["x", "y", "z", "qw", "qx", "qy", "qz"]
 
         LANG = None
-        MANO = None # TODO fix later
+        MANO = None  # TODO fix later
 
     NAMES = {
         "observation": {
@@ -143,12 +143,12 @@ def create(
     def make_spec(k, arr):
         key = ".".join([str(_k.key) for _k in k])
         dtype = arr.dtype.name if "image" not in key else mode
-        names= flatten_dict(NAMES, sep=".").get(key)
+        names = flatten_dict(NAMES, sep=".").get(key)
 
         return {
             "dtype": dtype,
             "shape": arr.shape,
-            **({"names": names.value} if names is not None else {} ),
+            **({"names": names.value} if names is not None else {}),
         }
 
     features = flatten_dict(example, sep=".")

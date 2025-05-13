@@ -14,8 +14,11 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from pynput import keyboard
 from tqdm import tqdm
 
-from xgym.controllers import (KeyboardController, 
-                              ScriptedController, SpaceMouseController)
+from xgym.controllers import (
+    KeyboardController,
+    ScriptedController,
+    SpaceMouseController,
+)
 from xgym.model_controllers import ModelController
 from xgym.gyms import Base, Lift, Stack
 from xgym.utils import boundary as bd
@@ -32,9 +35,8 @@ class RunCFG:
     env_name: str = f"xgym-sandbox-{task}-v0-{time}"
     data_dir: str = osp.join(base_dir, env_name)
 
-    nsteps: int = 30 
+    nsteps: int = 30
     nepisodes: int = 100
-
 
 
 plt.switch_backend("Agg")
@@ -89,13 +91,13 @@ def main(cfg: RunCFG):
 
         # timestep = env.reset()
         # obs = timestep.observation
-        for _ in tqdm(range(int(cfg.nsteps)*freq), desc=f"EP{ep}"):  # 3 episodes
+        for _ in tqdm(range(int(cfg.nsteps) * freq), desc=f"EP{ep}"):  # 3 episodes
 
             tic = time.time()
             print("\n" * 3)
 
             # obs["img"] = jax.tree_map(
-                # lambda x: cv2.resize(np.array(x), (224, 224)), obs["img"]
+            # lambda x: cv2.resize(np.array(x), (224, 224)), obs["img"]
             # )
 
             # print(obs["img"].keys())
@@ -119,7 +121,7 @@ def main(cfg: RunCFG):
             # action[-1] =  0.2 if action[-1] < 0.8 else 1  # less gripper
 
             # cv2.imshow( "data Environment", img,)
-                # cv2.cvtColor(cu.tile(cu.writekeys(obs["img"])), cv2.COLOR_RGB2BGR),
+            # cv2.cvtColor(cu.tile(cu.writekeys(obs["img"])), cv2.COLOR_RGB2BGR),
             # cv2.waitKey(1)  # 1 ms delay to allow for rendering
 
             env.send(action)

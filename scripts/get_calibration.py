@@ -5,11 +5,13 @@ from dataclasses import dataclass
 from typing import List, Optional, Union
 
 import cv2
+
 # import gym as oaigym
 # import gymnasium as gym
 import numpy as np
 import tyro
 from rich.pretty import pprint
+
 # from gello.cameras.camera import CameraDriver
 # from misc.boundary import BoundaryManager
 # from gello.cameras.realsense_camera import RealSenseCamera, get_device_ids
@@ -247,12 +249,12 @@ def main(cfg: Config):
         np.array([-0.12, 0.78, -0.31, 1.67, 0.64, 0.62, 2.48]),
         np.array([0.77, 0.96, -0.76, 1.75, 0.49, 0.69, 3.79]),
         np.array([0.29, 0.58, -0.5, 1.49, 0.32, 1.0, 3.34]),
-        np.array([-0.47, -0.1 ,  0.33,  0.66, -0.1 ,  1.12,  2.71]),
+        np.array([-0.47, -0.1, 0.33, 0.66, -0.1, 1.12, 2.71]),
     ]
 
     # Interpolate waypoints
     waypoints = [
-    interpolate_waypoints(a, b) for a, b in zip(waypoints[:-1], waypoints[1:])
+        interpolate_waypoints(a, b) for a, b in zip(waypoints[:-1], waypoints[1:])
     ]
     waypoints = sum(waypoints, [])
 
