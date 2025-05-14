@@ -1,8 +1,10 @@
 import enum
-from dataclasses import field
 import shutil
+import time
+from collections import deque
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Literal, Union
 
@@ -16,151 +18,39 @@ import torch
 import tyro
 from flax.traverse_util import flatten_dict
 from jax import numpy as jnp
-from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME as LEROBOT_HOME
+from lerobot.common.datasets.lerobot_dataset import \
+    HF_LEROBOT_HOME as LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+# from mano_pipe_v3 import remap_keys, select_keys
 from rich.pretty import pprint
 from tqdm import tqdm
+from webpolicy.deploy.client import WebsocketClientPolicy
 
 import xgym
-from xgym.lrbt.convert import (
-    DEFAULT_DATASET_CONFIG,
-    FRAME_MODE,
-    MOTORS,
-    DatasetConfig,
-    Embodiment,
-    Task,
-    create,
-)
-from xgym.rlds.util import add_col, remove_col
+from xgym import BASE
+from xgym.calibrate.april import Calibrator
+from xgym.lrbt.convert import (DEFAULT_DATASET_CONFIG, FRAME_MODE, MOTORS,
+                               DatasetConfig, Embodiment, Task, create)
+from xgym.lrbt.from_memmap import Config
+from xgym.lrbt.util import get_taskinfo
+from xgym.rlds.util import (add_col, apply_persp, apply_uv, apply_xyz,
+                            perspective_projection, remove_col, solve_uv2xyz)
 from xgym.rlds.util.render import render_openpose
 from xgym.rlds.util.trajectory import binarize_gripper_actions, scan_noop
 from xgym.viz.mano import overlay_palm, overlay_pose
-
-from xgym.lrbt.from_memmap import Config
-
-
-import time
-from enum import Enum
-
-from tqdm import tqdm
-
-from collections import deque
-from dataclasses import dataclass
-from pathlib import Path
-
-import cv2
-import jax
-import numpy as np
-import tyro
-
-# from get_calibration import MyCamera
-# from mano_pipe_v3 import remap_keys, select_keys
-from rich.pretty import pprint
-from webpolicy.deploy.client import WebsocketClientPolicy
-from typing import Literal
-
-from xgym import BASE
-from xgym.calibrate.april import Calibrator
-from xgym.rlds.util import (
-    add_col,
-    apply_persp,
-    apply_uv,
-    apply_xyz,
-    perspective_projection,
-    remove_col,
-    solve_uv2xyz,
-)
+import threading
+from typing import Union
 
 np.set_printoptions(suppress=True, precision=3)
+
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 def spec(thing: dict[str, np.ndarray]):
     """Returns the shape of each key in the dict."""
     return jax.tree.map(lambda x: x.shape, thing)
-
-
-import threading
-from typing import Union
-
-
-class MyCamera:
-    def __repr__(self) -> str:
-        return f"MyCamera(device_id={'TODO'})"
-
-    def __init__(self, cam: Union[int, cv2.VideoCapture]):
-        self.cam = cv2.VideoCapture(cam) if isinstance(cam, int) else cam
-        self.thread = None
-
-        self.fps = 30
-        self.dt = 1 / self.fps
-
-        # while
-        # _, self.img = self.cam.read()
-        self.start()
-        time.sleep(1)
-
-    def start(self):
-
-        self._recording = True
-
-        def _record():
-            while self._recording:
-                tick = time.time()
-                # ret, self.img = self.cam.read()
-                self.cam.grab()
-
-                toc = time.time()
-                elapsed = toc - tick
-                time.sleep(max(0, self.dt - elapsed))
-
-        self.thread = threading.Thread(target=_record, daemon=True)
-        self.thread.start()
-
-    def stop(self):
-        self._recording = False
-        if self.thread is not None:
-            self.thread.join()  # Wait for the thread to finish
-            del self.thread
-
-    def read(self):
-        ret, img = self.cam.retrieve()
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        return ret, img
-
-
-class NPZVideoReader:
-
-    def __init__(self, dir: str):
-        self.dir = dir
-        self.files = list(Path(dir).rglob("ep*.npz"))
-        self._load_next_episode()
-
-    def _load_next_episode(self):
-        if not self.files:
-            self.frames = None
-            return
-        f = self.files.pop(0)
-        ep = np.load(f, allow_pickle=True)
-        ep = {k: ep[k] for k in ep.keys()}
-        pprint(spec(ep))  # assuming spec() is defined elsewhere
-        self.frames = ep[list(ep.keys())[0]]
-        self.idx = 0
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if self.frames is None:
-            raise StopIteration
-        if self.idx >= self.frames.shape[0]:
-            self._load_next_episode()
-            return self.__next__()
-        frame = self.frames[self.idx]
-        self.idx += 1
-        return True, frame
-
-    def read(self):
-        return self.__next__()
 
 
 # 4x4 matx
@@ -176,34 +66,14 @@ T_xflip = np.array(
 
 
 @dataclass
-class Source:
-    pass
-
-
-@dataclass
-class Camera(Source):
-    idx: int = 3  # the camera idx to use
-
-
-@dataclass
-class File(Source):
-    dir: str
-
-    # typ: Literal["mp4", "npz"] = "npz" # the type of video file
-
-
-@dataclass
 class HamerConfig:
     host: str
     port: int
 
-    # src: Camera | File
-    # cam: int = 3  # the camera idx to use
-    # mode: Mode = Mode.CAM  # the mode to use, either CAM or FILE
-
 
 def remap_keys(out: dict):
     out = {k.replace("pred_", "").replace("_params", ""): v for k, v in out.items()}
+    out = {k.replace("keypoints_", "kp"): v for k, v in out.items()}
     return out
 
 
@@ -213,7 +83,7 @@ def select_keys(out: dict):
     TODO break into separate func?
     """
 
-    out["keypoints_3d"] += out.pop("cam_t_full")[:, None, :]
+    out["kp3d"] += out.pop("cam_t_full")[:, None, :]
     keep = [
         # "box_center",
         # "box_size",
@@ -224,8 +94,8 @@ def select_keys(out: dict):
         # "cam",
         # "cam_t",
         # "cam_t_full", # used above
-        "keypoints_2d",  # these are wrt the box not full img ... solve for 2d
-        "keypoints_3d",
+        "kp2d",  # these are wrt the box not full img ... solve for 2d
+        "kp3d",
         "mano.betas",
         "mano.global_orient",
         "mano.hand_pose",
@@ -237,6 +107,17 @@ def select_keys(out: dict):
     return {k: out[k] for k in keep if k in out}
 
 
+def check_shapes(out: dict):
+    """sometimes hamer returns 2 predictions"""
+    # TODO in the future , filter by mIOU on bboxes
+
+    for k in [ 'kp3d', 'mano.betas', 'mano.global_orient', 'mano.hand_pose', 'right' , 'img_wrist']:
+        if out[k].shape and out[k].shape[0] == 2: # some have no shape 
+            logger.warning(f"Warning: {k} has 2 predictions, taking first")
+            out[k] = out[k][0]
+    return out
+
+
 def postprocess(out: dict, frame: np.ndarray):
 
     out = jax.tree.map(lambda x: x.copy(), out)
@@ -244,25 +125,24 @@ def postprocess(out: dict, frame: np.ndarray):
     box = {
         "center": out["box_center"][0],
         "size": out["box_size"][0],
-        "kp2d": out.pop("keypoints_2d")[0],  # only relevant to box
+        "kp2d": out.pop("kp2d")[0],  # only relevant to box
     }
 
     right = bool(out["right"][0])
     left = not right
 
     if left:
-        n = len(out["keypoints_3d"])
-        kp3d = add_col(out["keypoints_3d"])
+        n = len(out["kp3d"])
+        kp3d = add_col(out["kp3d"])
         kp3d = remove_col((kp3d[0] @ T_xflip)[None])
-        out["keypoints_3d"] = np.concatenate([kp3d for _ in range(n)])
+        out["kp3d"] = np.concatenate([kp3d for _ in range(n)])
 
     out = select_keys(out)
 
     f = out["scaled_focal_length"]
     P = perspective_projection(f, H=frame.shape[0], W=frame.shape[1])
-    points2d = apply_persp(out["keypoints_3d"], P)[0, :, :-1]
+    points2d = apply_persp(out["kp3d"], P)[0, :, :-1]
     out["kp2d"] = points2d
-    out["kp3d"] = out.pop("keypoints_3d")
 
     out = out | {"box": box}
     squeeze = lambda arr: jax.tree.map(lambda x: x.squeeze(), arr)
@@ -271,6 +151,9 @@ def postprocess(out: dict, frame: np.ndarray):
     def maybe_unsqueeze(x):
         return x.reshape((-1)) if x.ndim <= 1 else x
 
+    # is_leaf = lambda x: isinstance(x, (np.array, tuple, list))
+    out = jax.tree.map(lambda x: np.array(x), out)
+    out = check_shapes(out)
     out = jax.tree.map(maybe_unsqueeze, out)
     out = jax.tree.map(lambda x: x.astype(np.float32), out)
 
@@ -291,9 +174,8 @@ def main(cfg: MyConfig):
 
     times = []
 
-    taskfile = next(Path(cfg.dir).glob("*.npy"))
-    _task = taskfile.stem.replace("_", " ")
-    _lang = np.load(taskfile)
+    taskinfo = get_taskinfo(cfg.dir)
+    _task, _lang = taskinfo["task"], taskinfo["lang"]
 
     pprint(cfg)
 
@@ -327,7 +209,14 @@ def main(cfg: MyConfig):
             }
             steps.append(step)
 
-        steps = jax.tree.map(lambda *_x: np.stack(_x, axis=0), *steps)
+        try:
+            steps = jax.tree.map(lambda *_x: np.stack(_x, axis=0), *steps)
+        except Exception as e:
+            logger.error(f"Error stacking steps: {e}")
+
+            shapes = jax.tree.map(lambda *_x: set(__x.shape for __x in _x), *steps)
+            pprint(shapes)
+            raise e
 
         pprint(spec(steps))
         # quit()
