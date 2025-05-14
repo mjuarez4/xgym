@@ -4,6 +4,7 @@ import numpy as np
 
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,4 +18,4 @@ def get_taskinfo(dir):
 
     _task = taskfile.stem.replace("_", " ")
     _lang = np.load(taskfile)
-    return {'lang': _lang, 'task': _task}
+    return {"lang": _lang, "task": _task}

@@ -18,9 +18,9 @@ import torch
 import tyro
 from flax.traverse_util import flatten_dict
 from jax import numpy as jnp
-from lerobot.common.datasets.lerobot_dataset import \
-    HF_LEROBOT_HOME as LEROBOT_HOME
+from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME as LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+
 # from mano_pipe_v3 import remap_keys, select_keys
 from rich.pretty import pprint
 from tqdm import tqdm
@@ -29,12 +29,26 @@ from webpolicy.deploy.client import WebsocketClientPolicy
 import xgym
 from xgym import BASE
 from xgym.calibrate.april import Calibrator
-from xgym.lrbt.convert import (DEFAULT_DATASET_CONFIG, FRAME_MODE, MOTORS,
-                               DatasetConfig, Embodiment, Task, create)
+from xgym.lrbt.convert import (
+    DEFAULT_DATASET_CONFIG,
+    FRAME_MODE,
+    MOTORS,
+    DatasetConfig,
+    Embodiment,
+    Task,
+    create,
+)
 from xgym.lrbt.from_memmap import Config
 from xgym.lrbt.util import get_taskinfo
-from xgym.rlds.util import (add_col, apply_persp, apply_uv, apply_xyz,
-                            perspective_projection, remove_col, solve_uv2xyz)
+from xgym.rlds.util import (
+    add_col,
+    apply_persp,
+    apply_uv,
+    apply_xyz,
+    perspective_projection,
+    remove_col,
+    solve_uv2xyz,
+)
 from xgym.rlds.util.render import render_openpose
 from xgym.rlds.util.trajectory import binarize_gripper_actions, scan_noop
 from xgym.viz.mano import overlay_palm, overlay_pose
@@ -45,6 +59,7 @@ np.set_printoptions(suppress=True, precision=3)
 
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -111,8 +126,15 @@ def check_shapes(out: dict):
     """sometimes hamer returns 2 predictions"""
     # TODO in the future , filter by mIOU on bboxes
 
-    for k in [ 'kp3d', 'mano.betas', 'mano.global_orient', 'mano.hand_pose', 'right' , 'img_wrist']:
-        if out[k].shape and out[k].shape[0] == 2: # some have no shape 
+    for k in [
+        "kp3d",
+        "mano.betas",
+        "mano.global_orient",
+        "mano.hand_pose",
+        "right",
+        "img_wrist",
+    ]:
+        if out[k].shape and out[k].shape[0] == 2:  # some have no shape
             logger.warning(f"Warning: {k} has 2 predictions, taking first")
             out[k] = out[k][0]
     return out
