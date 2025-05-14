@@ -27,7 +27,11 @@ dependencies = [
     "tyro>=0.9.19",
     "webpolicy",
     "xacro>=1.13.3",
+    # envlogger[tfds]
+    # bsuite
 ]
+
+
 
 [project.optional-dependencies]
 ctrl = [
