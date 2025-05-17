@@ -9,9 +9,9 @@ import jax.numpy as jnp
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
-
 from xgym import MANO_1, MANO_1DONE, MANO_2, MANO_4
-from xgym.model_controllers import HamerController
+
+# from xgym.model_controllers import HamerController
 from xgym.rlds.util import (
     add_col,
     apply_persp,
