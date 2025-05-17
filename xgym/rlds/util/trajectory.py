@@ -84,7 +84,9 @@ def is_noop(self, action, prev_action=None, threshold=1e-3):
     )
 
 
-def scan_noop(positions: jnp.ndarray, threshold: float = 1e-3) -> jnp.ndarray:
+def scan_noop(
+    positions: jnp.ndarray, threshold: float = 1e-3, binary=True
+) -> jnp.ndarray:
     """
     Given a trajectory (positions: [n, d]), returns a boolean array of length n
     indicating whether each step is a no-op.
@@ -92,10 +94,13 @@ def scan_noop(positions: jnp.ndarray, threshold: float = 1e-3) -> jnp.ndarray:
     first = jnp.linalg.norm(positions[0, :-1]) < threshold
 
     def f(prev, this):
-        noop = jnp.logical_and(
-            jnp.linalg.norm(this[:-1] - prev[:-1]) < threshold,
-            this[-1] == prev[-1],
-        )
+        if binary:
+            noop = jnp.logical_and(
+                jnp.linalg.norm(this[:-1] - prev[:-1]) < threshold,
+                this[-1] == prev[-1],
+            )
+        else:
+            noop = jnp.linalg.norm(this - prev) < threshold
 
         act = jnp.where(noop, prev, this)
         return act, noop
