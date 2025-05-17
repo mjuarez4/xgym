@@ -1,6 +1,8 @@
 import enum
-import shutil
 from copy import deepcopy
+
+import torch
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Union
@@ -12,15 +14,15 @@ import jax.numpy as jnp
 import lerobot
 import numpy as np
 import tensorflow_datasets as tfds
-import torch
 import tyro
-import xgym
 from flax.traverse_util import flatten_dict
 from jax import numpy as jnp
 from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME as LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from rich.pretty import pprint
 from tqdm import tqdm
+
+import xgym
 from xgym.rlds.util import add_col, remove_col
 from xgym.rlds.util.render import render_openpose
 from xgym.rlds.util.trajectory import binarize_gripper_actions, scan_noop
