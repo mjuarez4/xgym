@@ -1,0 +1,10 @@
+[project]
+name = "xarm7standalone"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pytorch-kinematics>=0.7.5",
+    "rich>=14.0.0",
+]
