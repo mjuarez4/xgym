@@ -135,6 +135,7 @@ class Config:
     viz: bool = False  # show the camera images while recording
     cammap: bool = False  # assert that you checked the cam map with camera.py
     mode: Mode = Mode.COLLECT
+    show_first_only: bool = False  # show only the first frame of each episode
 
     def __post_init__(self):
 
@@ -204,7 +205,12 @@ def main(cfg: Config):
         wait = int(1000 / cfg.fps)  # convert fps to ms
         firsts = []
         for ep in tqdm(eps, leave=False):
-            data = np.load(ep)
+            try:
+                data = np.load(ep)
+            except Exception as e:
+                print(f"Error loading {ep}: {e}")
+                ep.unlink()  # remove the file
+                continue
             data = {k: v for k, v in data.items()}
 
             n = len(data[list(data.keys())[0]])
@@ -215,11 +221,12 @@ def main(cfg: Config):
                 if i == 0:
                     firsts.append(all_imgs)
                 cv2.imshow("frame", recolor(all_imgs))
-
-                key = cv2.waitKey(wait * 2)
-                if key == ord("q"):
+                if cfg.show_first_only:
                     break
-            if key == ord("q"):
+
+                if (key := cv2.waitKey(wait)) == ord("q"):
+                    break
+            if (key := cv2.waitKey(wait)) == ord("q"):
                 break
 
         _f = 255 - np.array(firsts)[..., -1:].std(0).astype(np.uint8)  # [...,-1:]
@@ -285,7 +292,7 @@ def main(cfg: Config):
             time.sleep(max(0, dt - elapsed))
 
         flush(frames, ep, cfg)
-        wait_for_pedal(pedal, cams, cfg.viz)
+        wait_for_pedal(pedal, cams, True)
 
 
 if __name__ == "__main__":
