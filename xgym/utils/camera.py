@@ -14,8 +14,8 @@ def square(img: np.array):
     return img[y : y + s, x : x + s]
 
 
-def resize_all(imgs: List[np.array]):
-    m = max([f.shape[0] for f in imgs])
+def resize_all(imgs: List[np.array], m=None):
+    m = max([f.shape[0] for f in imgs]) if m is None else m
     return [cv2.resize(f, (m, m)) for f in imgs]
 
 
