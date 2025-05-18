@@ -701,11 +701,15 @@ class Base(gym.Env):
             raise ValueError(f"Error in inverse kinematics: {code}")
 
     def kin_fwd(self, angles):
+        """Forward kinematics for the robot arm.
+        Returns:
+            np.array: The pose for the given joint angles.
+        """
         code, pose = self.robot.get_forward_kinematics(angles)
         if code == 0:
             return pose
         else:
-            raise ValueError(f"Error in inverse kinematics: {code}")
+            raise ValueError(f"Error in forward kinematics: {code}")
 
     def set_mode(self, mode):
         if mode == 2:
