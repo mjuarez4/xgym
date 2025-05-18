@@ -11,11 +11,15 @@ XGym is a robotics and reinforcement learning toolkit that wraps hardware contro
 
 ## Installation
 
+we use [uv](https://docs.astral.sh/uv/getting-started/installation/) for package management.
+
 ```bash
-pip install -e .[ctrl,data]
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync --extra ctrl --extra data
 ```
 
-The `ctrl` extra installs joystick input libraries and the XArm SDK, while the `data` extra installs TensorFlow and dataset dependencies.
+* `ctrl` extra installs joystick input libraries and the XArm SDK
+* `data` extra installs TensorFlow and dataset dependencies.
 
 Ensure your user is in the `plugdev` group for access to USB devices:
 
@@ -34,25 +38,26 @@ sudo usermod -aG plugdev $USER
 
 1. **Run a camera or controller node** to start streaming data. Example:
    ```bash
-   python -m xgym.nodes.camera
+   # TODO(codex) fix
    ```
 2. **Collect data** with the writer node:
    ```bash
-   python -m xgym.nodes.writer --out_dir /path/to/data
+   # TODO(codex) fix
    ```
 3. **Convert memmaps** to LeRobot datasets using the scripts in `lrbt`:
    ```bash
-   python xgym/lrbt/from_memmap.py --data_dir /path/to/data
+   python xgym/lrbt/from_memmap.py --help # TODO(codex) fix
    ```
-4. **Train in Gym environments** with your RL algorithm of choice.
 
-## Learning more
+## Scripts
 
-See the scripts in the `scripts/` directory for examples of launching teleoperation, reading datasets, and evaluating agents. The environment base class lives in `xgym/gyms/base.py` and shows how the robot is initialized and kept within safe boundaries.
+TODO(codex) add scripts documentation with purpose and usage
 
 ## Contributing
 
 Pull requests are welcome. Please format code with `black` before submitting.
+
+TODO(codex) fix git precommit hook
 
 ## License
 
