@@ -46,6 +46,9 @@ data = [
     "tensorflow>=2.19.0",
     "tensorflow-datasets>=4.9.0",
 ]
+dev = [
+    "pre-commit>=4.2.0",
+]
 
 [tool.uv.sources]
 gello = { git = "https://github.com/wuphilipp/gello_software.git" }
