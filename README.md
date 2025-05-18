@@ -49,7 +49,7 @@ pre-commit run --all-files
 - `xgym/rlds/` – Dataset builders for TFDS.
 - `scripts/` – Launch files and utilities for data collection and evaluation.
 
-## Usage
+# Usage
 
 1. **Run a camera or controller node** to start streaming data. Example:
    ```bash
@@ -68,7 +68,11 @@ pre-commit run --all-files
 
 TODO(codex) add scripts documentation with purpose and usage
 
-## Contributing
+## Lerobot Dataset
+
+see [lrbt/README.md](xgym/lrbt/README.md) for details on the dataset format and usage.
+
+# Contributing
 
 Pull requests are welcome. Please run `pre-commit` before submitting to ensure
 formatting and lint checks pass.
