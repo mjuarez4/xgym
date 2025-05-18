@@ -27,6 +27,21 @@ Ensure your user is in the `plugdev` group for access to USB devices:
 sudo usermod -aG plugdev $USER
 ```
 
+## Development
+
+Install the pre-commit hooks to automatically format code and run basic checks:
+
+```bash
+uv pip install pre-commit
+PRE_COMMIT_USE_UV=1 pre-commit install
+```
+
+Run all hooks manually with:
+
+```bash
+pre-commit run --all-files
+```
+
 ## Directory structure
 
 - `xgym/gyms/` – Gymnasium environments and wrappers.
@@ -55,9 +70,8 @@ TODO(codex) add scripts documentation with purpose and usage
 
 ## Contributing
 
-Pull requests are welcome. Please format code with `black` before submitting.
-
-TODO(codex) fix git precommit hook
+Pull requests are welcome. Please run `pre-commit` before submitting to ensure
+formatting and lint checks pass.
 
 ## License
 

@@ -52,3 +52,13 @@ gello = { git = "https://github.com/wuphilipp/gello_software.git" }
 xarm-python-sdk = { git = "https://github.com/xArm-Developer/xArm-Python-SDK.git" }
 lerobot = { git = "https://github.com/huggingface/lerobot" }
 webpolicy = { git = "https://github.com/mhyatt000/webpolicy" }
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 88
