@@ -32,8 +32,8 @@ sudo usermod -aG plugdev $USER
 Install the pre-commit hooks to automatically format code and run basic checks:
 
 ```bash
-uv pip install pre-commit
-PRE_COMMIT_USE_UV=1 pre-commit install
+uv sync --extra dev # gives pre-commit
+uv pre-commit install
 ```
 
 Run all hooks manually with:
