@@ -22,12 +22,12 @@ def fold_angle(theta: np.ndarray) -> np.ndarray:
     )
 
 
-def read_all(root=Path().cwd(), view=False):
+def read_all(root=Path().cwd(), show=False):
     paths = list(root.rglob("*.dat"))
     print(paths)
     for p in paths:
-        read(p)
-        if view:
+        info, data = read(p)
+        if show:
             view(data)
 
 
