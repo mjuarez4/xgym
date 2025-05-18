@@ -1,31 +1,21 @@
-import json_numpy as jp
-
-jp.patch()
-import os
+from abc import ABC
+from dataclasses import dataclass
 import threading
 import time
-from abc import ABC, abstractmethod
-from collections import namedtuple
-from dataclasses import dataclass
-from pprint import pprint
-from typing import Any, Dict, Optional
-
-import jax
+from typing import Optional
 
 # import keyboard
 import numpy as np
 import pynput
+from pynput.keyboard import Key
 
 # spacemouse imports
 import pyspacemouse
-import requests
-from pynput.keyboard import Key
 from pyspacemouse.pyspacemouse import SpaceNavigator
 
 
 @dataclass
 class SpaceMouseConfig:
-
     # sensitivity
     scale = np.array(
         [
@@ -43,7 +33,6 @@ class SpaceMouseConfig:
 
 
 class VelocitySMC(SpaceMouseConfig):
-
     # xyz, rpy, gripper
     # yxz, rpy, gripper
     # rpy is rotation along x, y, z
@@ -79,9 +68,7 @@ def ema_2d(data, window):
 
 
 class SpaceMouseController:  # from 1 -> inf
-
     def __init__(self, cfg: SpaceMouseConfig = VelocitySMC()):
-
         self.cfg = cfg
         self.state: Optional[SpaceNavigator] = SpaceNavigator(
             t=0.0,
@@ -143,7 +130,6 @@ class SpaceMouseController:  # from 1 -> inf
         self.state = state
 
     def read(self, as_dict=False):
-
         if as_dict:
             print(type(self.state))
             return self.state._asdict()
@@ -175,14 +161,12 @@ class SpaceMouseController:  # from 1 -> inf
 
 
 class Controller(ABC):
-
     def __init__(self):
         pass
 
 
 class KeyboardController:
     def __init__(self):
-
         self.vec = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         self.running = True
         self.keys_pressed = set()
@@ -199,7 +183,6 @@ class KeyboardController:
         self.run()  # Begin the run method at the end of initialization
 
     def on_key_press(self, key):
-
         if isinstance(key, pynput.keyboard._xorg.KeyCode):
             key = key.char
 
@@ -209,7 +192,6 @@ class KeyboardController:
         self.update_vector()
 
     def on_key_release(self, key):
-
         if isinstance(key, pynput.keyboard._xorg.KeyCode):
             key = key.char
         self.keys_pressed.discard(key)

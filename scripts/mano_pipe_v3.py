@@ -1,19 +1,12 @@
 import shutil
-from pathlib import Path
-from pprint import pprint
-from typing import Any, Callable, TypeVar, overload
 
 import cv2
 import jax
-import jax.numpy as jnp
 import numpy as np
-from PIL import Image
 from tqdm import tqdm
-from xgym import MANO_1, MANO_1DONE, MANO_2, MANO_4
 
-# from xgym.model_controllers import HamerController
+from xgym import MANO_1, MANO_1DONE, MANO_4
 from xgym.rlds.util import (
-    add_col,
     apply_persp,
     apply_uv,
     apply_xyz,
@@ -21,7 +14,6 @@ from xgym.rlds.util import (
     remove_col,
     solve_uv2xyz,
 )
-from xgym.rlds.util.render import render_openpose
 from xgym.rlds.util.transform import center_crop
 
 
@@ -196,7 +188,6 @@ class MultiServerCN:
 
 @draccus.wrap()
 def main(cfg: MultiServerCN):
-
     servers = cfg.servers
     servers = [HamerController(s.host, s.port) for s in servers]
 

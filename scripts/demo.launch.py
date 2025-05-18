@@ -1,13 +1,12 @@
+from dataclasses import dataclass
 import os.path as osp
 import time
-from dataclasses import dataclass, field
 
 import draccus
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
-from tqdm import tqdm
 
-from xgym.nodes import Camera, FootPedal, Gello, Governor, Xarm, SpaceMouse, Writer
+from xgym.nodes import Camera, FootPedal, Gello, Governor, SpaceMouse, Writer, Xarm
 
 # import atexit
 # import signal
@@ -17,7 +16,6 @@ from xgym.nodes import Camera, FootPedal, Gello, Governor, Xarm, SpaceMouse, Wri
 # from xgym.utils import camera as cu
 # from xgym.utils.boundary import PartialRobotState as RS
 # from xgym.controllers import (KeyboardController, ScriptedController, SpaceMouseController)
-# from xgym.model_controllers import ModelController
 
 
 @dataclass
