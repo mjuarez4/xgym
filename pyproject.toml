@@ -46,9 +46,22 @@ data = [
     "tensorflow>=2.19.0",
     "tensorflow-datasets>=4.9.0",
 ]
+dev = [
+    "pre-commit>=4.2.0",
+]
 
 [tool.uv.sources]
 gello = { git = "https://github.com/wuphilipp/gello_software.git" }
 xarm-python-sdk = { git = "https://github.com/xArm-Developer/xArm-Python-SDK.git" }
 lerobot = { git = "https://github.com/huggingface/lerobot" }
 webpolicy = { git = "https://github.com/mhyatt000/webpolicy" }
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 88
