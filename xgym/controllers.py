@@ -46,13 +46,36 @@ class VelocitySMC(SpaceMouseConfig):
     # rpy is rotation along x, y, z
     scale = np.array(
         [
-            125.0,
-            125.0,
-            125.0,
-            0.5,
-            0.5,
-            0.5,
-            200,
+            1.0,
+            1.0,
+            1.0,
+            10.0,
+            10.0,
+            10.0,
+            0.1 * 850
+        ]
+    )
+
+    order = [1, 0, 2, 5, 3, 4, 6]
+    # applied after order
+    flip = [-1, 1, 1, -1, -1, -1, 1]
+    sensitivity = 1.5  # from 1 -> inf
+
+
+class PositionSMC(SpaceMouseConfig):
+
+    # xyz, rpy, gripper
+    # yxz, rpy, gripper
+    # rpy is rotation along x, y, z
+    scale = np.array(
+        [
+            1.0,
+            1.0,
+            1.0,
+            10.0,
+            10.0,
+            10.0,
+            0.1
         ]
     )
 
