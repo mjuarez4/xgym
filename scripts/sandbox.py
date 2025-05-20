@@ -125,9 +125,6 @@ def main(cfg: RunCFG):
             # obs, done, info = env.observation(), False, {}
             done = env._done
 
-            toc = time.time()
-            elapsed = toc - tic
-            time.sleep(max(0, dt - elapsed))  # 5hz
 
             print(f"done: {done}")
             if done:

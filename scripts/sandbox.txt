@@ -1,0 +1,8 @@
+SDK_VERSION: 1.14.7
+ROBOT_IP: 192.168.1.231, VERSION: v2.3.0, PROTOCOL: V1, DETAIL: 7,7,XS1100,XX0000,v2.3.0, TYPE1300: [0, 0]
+change protocol identifier to 3
+[set_state], xArm is ready to move
+SpaceMouse Compact found
+SpaceMouse Compact found
+SpaceMouse Compact found
+SpaceMouse connected.

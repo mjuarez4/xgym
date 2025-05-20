@@ -5,16 +5,11 @@ from dataclasses import dataclass, field
 
 import cv2
 import draccus
-# import envlogger
 import gymnasium as gym
 import jax
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
-from bsuite.utils.gym_wrapper import DMEnvFromGym, GymFromDMEnv
-# from envlogger.backends.tfds_backend_writer import \
-# TFDSBackendWriter as TFDSWriter
-# from envlogger.testing import catch_env
 from pynput import keyboard
 from tqdm import tqdm
 
@@ -30,13 +25,15 @@ import draccus
 
 @dataclass
 class RunCFG:
+    host: str
+    port: int
 
     base_dir: str = osp.expanduser("~/data")
     time: str = time.strftime("%Y%m%d-%H%M%S")
     task: str = ""
     ensemble: bool = True
     nsteps: int = 100
-
+    
     def __post_init__(self):
         self.check()
 
@@ -54,10 +51,9 @@ def main(cfg: RunCFG):
 
     os.makedirs(cfg.data_dir, exist_ok=True)
 
-    # @ethan TODO make this a configurable parameter? see scripts/reader_rlds and github.com/dlwh/draccus
     model = ModelController(
-        "carina.cs.luc.edu",
-        8001,
+	cfg.host,
+	cfg.port,
         ensemble=cfg.ensemble,
         task=cfg.task,
     )
@@ -105,7 +101,6 @@ def main(cfg: RunCFG):
             # TODO the datasets should be fixed to regular proprio vals in mm and 0-1
             proprio[:3] = proprio[:3] / 1e3
             proprio[-1] = proprio[-1] / env.GRIPPER_MAX
-
             actions = model(
                 primary=obs["img"]["worm"],
                 high=obs["img"]["overhead"],

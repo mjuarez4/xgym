@@ -82,7 +82,7 @@ for e in tqdm(ds):
         imgs = cu.writekeys(imgs)
         imgs = np.concatenate(list(imgs.values()), axis=1)
         cv2.imshow("img", cv2.cvtColor(imgs, cv2.COLOR_RGB2BGR))
-        # cv2.waitKey(0) # key every frame/step
+        #cv2.waitKey(0) # key every frame/step
         cv2.waitKey(5)
         # cv2.waitKey(50)
 

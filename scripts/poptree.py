@@ -1,3 +1,5 @@
+
+#use in parent directory that contains all the data folders. e.g., python xgym/scripts/poptree.py data/
 import shutil
 from pathlib import Path
 

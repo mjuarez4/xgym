@@ -15,7 +15,6 @@ from xgym.utils import camera as cu
 _ = None
 import gymnasium as gym
 import numpy as np
-from gello.cameras.camera import CameraDriver
 # from misc.boundary import BoundaryManager
 from gello.cameras.realsense_camera import RealSenseCamera, get_device_ids
 from gello.data_utils.keyboard_interface import KBReset
@@ -54,7 +53,7 @@ def clear_camera_buffer(camera: cv2.VideoCapture, nframes=0):
         camera.grab()
 
 
-class MyCamera(CameraDriver):
+class MyCamera():
     def __repr__(self) -> str:
         return f"MyCamera(device_id={'TODO'})"
 
@@ -248,17 +247,21 @@ class Base(gym.Env):
         device_ids = get_device_ids()
         if len(device_ids) == 0:
             logger.error("No RealSense devices found.")
+        
+        #real sense disabled temp by matt
         self.rs = RealSenseCamera(flip=False, device_id=device_ids[0])
         logger.info("Cameras initialized.")
 
         # logitech cameras
         cams = cu.list_cameras()
+        print(cams)
         self.cams = {k: MyCamera(cam) for k, cam in cams.items()}
 
         # must be manually verified if changed
         self.cams = {
             "worm": self.cams[0],
-            'overhead': self.cams[2],
+            'overhead': self.cams[8],
+            #temp disabled
             'side': self.cams[10],
             }
 
@@ -332,9 +335,10 @@ class Base(gym.Env):
         pos = self.position
 
         if pos.gripper is None:
-            pos.gripper = self.gripper
-        if pos.gripper is None:
-            pos.gripper = self._obs["robot"]["position"][-1]
+           # pos.gripper = self.gripper
+           pos.gripper = 0
+        #if pos.gripper is None:
+           # pos.gripper = self._obs["robot"]["position"][-1]
 
         self._obs = {
             "robot": {

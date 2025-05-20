@@ -20,6 +20,7 @@ class RunCFG:
     env_name: str = f"xgym-mano-{task}-{time}"
     data_dir: str = base_dir / env_name
     nsteps: int = 300
+    nepisodes: int = 100
 
     def __post_init__(self):
 
@@ -46,7 +47,7 @@ def du_flatten(d, parent_key="", sep="."):
 
 
 def flush(episode: dict, ep: int, cfg: RunCFG):
-
+    print(f"what", len(episode))
     episode = {CAM_MAP[k]: v for k, v in episode.items() if k in CAM_MAP}
     out = str(cfg.data_dir / f"ep{ep}")
     np.savez(out, **episode)
@@ -66,7 +67,7 @@ def main(cfg: RunCFG):
     dt = 1 / fps
 
     print(cams)
-    for ep in tqdm(range(100)):
+    for ep in tqdm(range(cfg.nepisodes), leave=False):
         frames = {k: [] for k in cams.keys()}
         for step in tqdm(range(cfg.nsteps), leave=False):
 
@@ -92,7 +93,6 @@ def main(cfg: RunCFG):
             toc = time.time()
             elapsed = toc - tic
             time.sleep(max(0, dt - elapsed))
-
         flush(frames, ep, cfg)
 
     quit()

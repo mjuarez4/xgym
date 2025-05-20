@@ -1,4 +1,6 @@
 # hamer server symlinks
+*.dat
+*.json
 _DATA
 third-party
 

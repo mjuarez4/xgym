@@ -18,6 +18,7 @@ import enum
 class Task(enum.Enum):
     LIFT = "lift"
     DUCK = "duck"
+    STACK = "stack"
 
 class Embodiment(enum.Enum):
     SINGLE = "single"
@@ -48,7 +49,7 @@ def main(cfg: BaseReaderConfig):
     print(f"Loading {name} dataset")
     ds = tfds.load(name)["train"]
     # ds = ds.repeat(100)
-
+    print(len(ds))
     for ep in ds:
         steps = [x for x in ep["steps"]]
         for i, s in tqdm(enumerate(steps)):
