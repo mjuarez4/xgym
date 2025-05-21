@@ -4,8 +4,8 @@ from xgym.utils import logger
 try:
     from xgym import nodes
 except ImportError as ex:
-    print(ex)
-    print("Cannot import xgym.nodes")
+    logger.error(ex)
+    logger.error("Cannot import xgym.nodes")
 from xgym import viz
 
 logger.info("Setting up xgym")
