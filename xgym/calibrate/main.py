@@ -239,7 +239,7 @@ def main(cfg: Config):
         cv2.imshow("AprilTag Detection", cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
         if cv2.waitKey(0) & 0xFF == ord("q"):
-            break
+            quit()
 
     # save frames to mp4 video
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
