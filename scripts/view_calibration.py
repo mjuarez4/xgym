@@ -1,33 +1,27 @@
-import time
-from pprint import pprint
-
 import cv2
-import imageio
+from get_calibration import SPEED_JOINTS, Config, Xarm
 import numpy as np
 import tyro
+
 from xgym import BASE
 from xgym.calibrate.april import Calibrator
 from xgym.calibrate.urdf.robot import RobotTree
-from xgym.utils import camera as cu
-
-from get_calibration import SPEED_JOINTS, Config, MyCamera, Xarm
 
 
 def main(cfg: Config):
-
     xarm = Xarm(cfg.ip)
     xarm.speed = SPEED_JOINTS
 
     urdf = RobotTree()
     cal = Calibrator()
 
-    cam = MyCamera(0)
+    # cam = MyCamera(0)
+    cap = cv2.VideoCapture(0)
 
-    cam2base = np.load(BASE / "base.npz")["arr_0"]
+    cam2base = np.load(BASE / "base.npz")["base"]
 
     while True:
-
-        frame = cam.read()
+        _, frame = cap.read()
         joints = xarm.angles
 
         kins = urdf.set_pose(joints)
@@ -56,7 +50,7 @@ def main(cfg: Config):
             cv2.line(frame, a, b, pink, 1)
         cv2.circle(frame, b, 4, pink, -1)
 
-        print(cam2base.dtype)
+        print(points[-1])
         tcp = keypoints["link_tcp"].astype(np.float64)
         cal.draw_pose_axes(
             frame,
