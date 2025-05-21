@@ -1,23 +1,14 @@
+from dataclasses import dataclass
 import os.path as osp
-import subprocess
-import sys
 import time
-from dataclasses import dataclass, field
 
 import draccus
-import numpy as np
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
-from rclpy.node import Node
-from std_msgs.msg import String
-from tqdm import tqdm
-from xgym.nodes.camera import CameraNode
+
 from xgym.nodes.controller import SpaceMouseNode
-from xgym.nodes.xgello import GelloArgs, GelloNode
 from xgym.nodes.robot import RobotNode
-from xgym.nodes.writer import Writer
-from xgym.utils.boundary import PartialRobotState as RS
-from xgym.nodes.viz import FastImageViewer
+from xgym.nodes.xgello import GelloArgs, GelloNode
 
 # import atexit
 # import signal
@@ -26,7 +17,6 @@ from xgym.nodes.viz import FastImageViewer
 # from xgym.utils import boundary as bd
 # from xgym.utils import camera as cu
 # from xgym.controllers import (KeyboardController, ScriptedController, SpaceMouseController)
-# from xgym.model_controllers import ModelController
 
 
 @dataclass

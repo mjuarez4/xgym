@@ -1,22 +1,16 @@
+from dataclasses import dataclass
 import os
 import os.path as osp
 import time
-from dataclasses import dataclass, field
 
 import cv2
 import draccus
-import gymnasium as gym
 import jax
 import numpy as np
-from pynput import keyboard
 from tqdm import tqdm
 
-from xgym.controllers import KeyboardController, ScriptedController
-from xgym.gyms import Base, Lift, Stack
-from xgym.model_controllers import ModelController
-from xgym.utils import boundary as bd
+from xgym.gyms import Lift
 from xgym.utils import camera as cu
-from xgym.utils.boundary import PartialRobotState as RS
 
 
 @dataclass
@@ -43,11 +37,11 @@ class RunCFG:
 
 @draccus.wrap()
 def main(cfg: RunCFG):
-
     print(cfg)
 
     os.makedirs(cfg.data_dir, exist_ok=True)
 
+    raise NotImplementedError("old ModelController is depricated")
     model = ModelController(
         cfg.host,
         cfg.port,
@@ -73,7 +67,6 @@ def main(cfg: RunCFG):
         # timestep = env.reset()
         # obs = timestep.observation
         for _ in tqdm(range(cfg.nsteps), desc=f"EP{ep}"):  # 3 episodes
-
             tic = time.time()
             print("\n" * 3)
 
@@ -106,7 +99,6 @@ def main(cfg: RunCFG):
 
             print(actions.round(3))
             for a, action in enumerate(actions):
-
                 # action[:3] *= int(1e3)
                 print(action.shape)
                 # action[3:6] = action[3:6].clip(-0.25,0.25)

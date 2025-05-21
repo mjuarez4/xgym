@@ -271,8 +271,8 @@ class JointBoundary(Boundary):
     max: PartialRobotState
 
     def post_init(self):
-        assert len(self.min.joins) == 7
-        assert len(self.max.joins) == 7
+        assert len(self.min.joints) == 7
+        assert len(self.max.joints) == 7
 
     def contains(self, state: PartialRobotState) -> bool:
         """Checks if the given robot state is within the joint limits.

@@ -1,34 +1,23 @@
+from dataclasses import dataclass
 import os
-import draccus
 import os.path as osp
 import time
-from dataclasses import dataclass, field
 
 import cv2
 import draccus
-import gymnasium as gym
-import jax
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from pynput import keyboard
 from tqdm import tqdm
 
 from xgym.controllers import (
-    KeyboardController,
-    ScriptedController,
     SpaceMouseController,
 )
-from xgym.model_controllers import ModelController
-from xgym.gyms import Base, Lift, Stack
-from xgym.utils import boundary as bd
-from xgym.utils import camera as cu
-from xgym.utils.boundary import PartialRobotState as RS
+from xgym.gyms import Lift
 
 
 @dataclass
 class RunCFG:
-
     task: str = input("Task: ").lower()
     base_dir: str = osp.expanduser("~/data")
     time: str = time.strftime("%Y%m%d-%H%M%S")
@@ -69,7 +58,6 @@ def plot(actions):
 
 @draccus.wrap()
 def main(cfg: RunCFG):
-
     os.makedirs(cfg.data_dir, exist_ok=True)
 
     agent = SpaceMouseController()
@@ -83,7 +71,6 @@ def main(cfg: RunCFG):
     hist = np.zeros(7)
 
     for ep in tqdm(range(cfg.nepisodes), desc="Episodes"):
-
         obs = env.reset()
         env.set_mode(7)
         time.sleep(0.4)
@@ -92,7 +79,6 @@ def main(cfg: RunCFG):
         # timestep = env.reset()
         # obs = timestep.observation
         for _ in tqdm(range(int(cfg.nsteps) * freq), desc=f"EP{ep}"):  # 3 episodes
-
             tic = time.time()
             print("\n" * 3)
 
