@@ -1,30 +1,16 @@
+from dataclasses import dataclass
+from enum import Enum
 import threading
 import time
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import List, Optional, Union
 
 import cv2
-
-# import gym as oaigym
-# import gymnasium as gym
 import numpy as np
-import tyro
 from rich.pretty import pprint
-
-# from gello.cameras.camera import CameraDriver
-# from misc.boundary import BoundaryManager
-# from gello.cameras.realsense_camera import RealSenseCamera, get_device_ids
-# from gello.data_utils.keyboard_interface import KBReset
-# from gym import spaces
+import tyro
 from xarm.wrapper import XArmAPI
 
-# from xgym.gyms.base import MyCamera
-
-# from xgym import logger
-# from xgym.utils import boundary as bd
-# from xgym.utils import camera as cu
-# from xgym.utils.boundary import PartialRobotState as RS
+np.set_printoptions(suppress=True, precision=2)
 
 
 class MyCamera:
@@ -44,7 +30,6 @@ class MyCamera:
         self.start()
 
     def start(self):
-
         self._recording = True
 
         def _record():
@@ -75,9 +60,6 @@ class MyCamera:
         return img
 
 
-from enum import Enum
-
-
 class OrientMode(str, Enum):
     RPY = "rpy"  # roll-pitch-yaw
     AA = "aa"  # axis-angle
@@ -91,9 +73,7 @@ class Orient:
 
 
 class Xarm:
-
     def __init__(self, ip: str):
-
         self.ip = ip
         self.is_radian = True
         self.relative = False
@@ -202,9 +182,6 @@ def deg2rad(deg: Union[float, List[float]]) -> Union[float, List[float]]:
     return deg * np.pi / 180
 
 
-np.set_printoptions(suppress=True, precision=2)
-
-
 def interpolate_waypoints(a, b, interval=0.1):
     """
     Interpolate between two waypoints a and b with a given interval.
@@ -220,7 +197,6 @@ def interpolate_waypoints(a, b, interval=0.1):
 
 
 def main(cfg: Config):
-
     xarm = Xarm(cfg.ip)
     xarm.speed = SPEED_JOINTS
 

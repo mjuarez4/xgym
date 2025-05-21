@@ -1,26 +1,24 @@
-import time
 from dataclasses import dataclass
 from functools import partial
-from typing import List, Optional, Tuple
+from typing import List
 
+from april import AprilDetection, Calibrator
 import cv2
 import numpy as np
-import tyro
-from pupil_apriltags import Detection, Detector
 from rich.pretty import pprint
 from scipy.spatial.transform import Rotation as R
-from tqdm import tqdm
-from xgym import BASE
+import tyro
+from urdf.robot import RobotTree
 
-from april import INTR_MAC, TAG3IN, AprilDetection, Calibrator, eef_pose_to_matrix
-from source import Camera, CameraConfig, DatReplay, FileConfig
+from xgym import BASE
 
 np.set_printoptions(suppress=True, precision=3)
 
 
 @dataclass
 class Config:
-    source: CameraConfig | FileConfig
+    pass
+    # source: CameraConfig | FileConfig
 
 
 # Helper function to invert a 4x4 homogeneous transformation matrix
@@ -126,33 +124,31 @@ ry_flip = np.array(
 
 def main(cfg: Config):
     calibrator = Calibrator()
-    source = cfg.source.create()
+    # source = cfg.source.create()
 
     T_base_eef, T_camera_tag = [], []
 
     ways = np.load(BASE / "ways.npz")
     ways = {k: ways[k] for k in ways.files}
 
-    kinvs = np.load(BASE / "kinvs.npz")
-    kinvs = kinvs["kinvs"]
-
-    from urdf.robot import RobotTree
-
     rtree = RobotTree()
 
-    # for s in tqdm(source):
-    # for d in tqdm(s):
+    kinv_path = BASE / "kinvs.npz"
+    kinvs = np.load(kinv_path)["kinvs"] if kinv_path.exists() else None
+    pprint(kinvs.shape)
 
-    _bases = np.load(BASE / "base.npz")["arr_0"]
+    msg = "Kinvs not found... run xgym/calibrate/urdf/robot"
+    assert kinvs is not None, msg
+
+    cam2base_path = BASE / "base.npz"
+    _bases = np.load(cam2base_path)["base"] if cam2base_path.exists() else None
+
     pprint(_bases)
 
-    centers = []
-    frames = []
-    bases = []
+    centers, frames, bases = [], [], []
     for i in range(len(ways["joints"])):
-
         d = {k: v[i] for k, v in ways.items()}
-        kinv = kinvs[i]
+        kinv = kinvs[i] if kinvs is not None else None
         # pprint(source[0].spec(d))
 
         joints = d["joints"]
@@ -187,20 +183,23 @@ def main(cfg: Config):
             )
 
             kin: tf.Transform3d = rtree.set_pose(joints, end_only=True).get_matrix()
-            kinv = np.linalg.inv(kin)[0]
-            print(kinv.shape)
+            kinv = np.linalg.inv(kin)[0] if kinv is not None else kinv
 
             kins = {
                 k: v.get_matrix().numpy()[0] for k, v in rtree.set_pose(joints).items()
             }
 
-            keypoints = {k: AX @ kinv @ v for k, v in kins.items()}
-            if _bases is not None:
-                keypoints = {k: _bases @ v for k, v in kins.items()}
+            if kinv is not None:
+                keypoints = {
+                    k: np.array(AX) @ np.array(kinv) @ np.array(v)
+                    for k, v in kins.items()
+                }
+                if _bases is not None:
+                    keypoints = {k: _bases @ v for k, v in kins.items()}
 
-            print(keypoints.keys())
+                print(keypoints.keys())
 
-            base = AX @ kinv  # @ rx_flip
+            base = np.array(AX) @ np.array(kinv)  # @ rx_flip
             bases.append(base)
             if _bases is not None:
                 base = _bases
@@ -213,13 +212,15 @@ def main(cfg: Config):
 
             # pprint(base)
             points = []
-            for k, v in keypoints.items():
-                point = calibrator.project_points(
-                    (0, 0, 0),
-                    v[:3, :3],
-                    v[:3, 3],
-                )
-                points.append(point.reshape(-1))
+            if kinv is not None:
+                for k, v in keypoints.items():
+                    point = calibrator.project_points(
+                        (0, 0, 0),
+                        v[:3, :3],
+                        v[:3, 3],
+                    )
+                    points.append(point.reshape(-1))
+
             for a, b in zip(points[:-1], points[1:]):
                 # print(a.shape, b.shape)
                 pink = (255, 0, 255)
@@ -249,7 +250,7 @@ def main(cfg: Config):
 
     bases = np.array(bases).mean(axis=0)
     # pprint(bases)
-    np.savez(BASE / "base.npz", bases)
+    np.savez(BASE / "base.npz", base=bases)
 
     quit()
 
@@ -354,7 +355,6 @@ def main(cfg: Config):
 
     # Draw on image
     for pt, b, frame in zip(image_pts, bases, frames):
-
         x, y = int(pt[0]), int(pt[1])
         # print(x, y)
         print(b)
@@ -362,7 +362,7 @@ def main(cfg: Config):
         cv2.circle(frame, (int(b[0]), int(b[1])), 6, (255, 0, 255), -1)
         cv2.putText(
             frame,
-            f"Point",
+            "Point",
             (x + 10, y),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,

@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "arm-pytorch-utilities>=0.4.3",
     "av>=14.3.0",
     "colorama>=0.4.6",
     "ffmpeg>=1.4",
@@ -19,7 +20,6 @@ dependencies = [
     "pupil-apriltags>=1.0.4.post11",
     "pygame>=2.6.1",
     "pynput>=1.8.1",
-    # "pyrealsense2>=2.55.1.6486",
     "pytorch-kinematics>=0.7.0", # 0.7.5 ?
     "pytransform3d>=3.14.0",
     "rich>=14.0.0",
@@ -47,6 +47,9 @@ data = [
 dev = [
     "pre-commit>=4.2.0",
 ]
+
+# TODO(codex) fix so that uv sync adds this project
+# still need to use uv pip install -e .
 
 [tool.uv.sources]
 gello = { git = "https://github.com/wuphilipp/gello_software.git" }

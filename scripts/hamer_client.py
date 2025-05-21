@@ -1,9 +1,7 @@
 import time
-from enum import Enum
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 
 mpl.use("Agg")
 
@@ -13,25 +11,20 @@ from pathlib import Path
 
 import cv2
 import jax
-import numpy as np
-import tyro
 
 # from get_calibration import MyCamera
-from mano_pipe_v3 import remap_keys, select_keys, solve_2d
+from mano_pipe_v3 import remap_keys, select_keys
+import numpy as np
 from rich.pretty import pprint
+import tyro
 from webpolicy.deploy.client import WebsocketClientPolicy
-from typing import Literal
 
-from xgym import BASE
 from xgym.calibrate.april import Calibrator
 from xgym.rlds.util import (
     add_col,
     apply_persp,
-    apply_uv,
-    apply_xyz,
     perspective_projection,
     remove_col,
-    solve_uv2xyz,
 )
 
 np.set_printoptions(suppress=True, precision=3)
@@ -63,7 +56,6 @@ class MyCamera:
         time.sleep(1)
 
     def start(self):
-
         self._recording = True
 
         def _record():
@@ -92,7 +84,6 @@ class MyCamera:
 
 
 class NPZVideoReader:
-
     def __init__(self, dir: str):
         self.dir = dir
         self.files = list(Path(dir).rglob("ep*.npz"))
@@ -181,7 +172,7 @@ def main(cfg: Config):
             cam = NPZVideoReader(cfg.src.dir)
 
     cal = Calibrator()
-    cam2base = np.load(BASE / "base.npz")["arr_0"]
+    # cam2base = np.load(BASE / "base.npz")["arr_0"]
 
     elapses = deque(maxlen=50)
     hist = deque(maxlen=10)
@@ -211,7 +202,6 @@ def main(cfg: Config):
         )
 
         if out is not None:
-
             out = jax.tree.map(lambda x: x.copy(), out)
             # pprint(spec(out))
 

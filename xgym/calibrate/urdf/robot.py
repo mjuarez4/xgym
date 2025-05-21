@@ -1,8 +1,6 @@
 # mpl webagg
-import matplotlib as mpl
-from tqdm import tqdm
-
-mpl.use("webagg")
+# import matplotlib as mpl
+# mpl.use("webagg")
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,6 +10,7 @@ import pytorch_kinematics as pk
 import pytorch_kinematics.transforms as tf
 from rich.pretty import pprint
 import torch
+from tqdm import tqdm
 
 # name of this file
 FNAME = Path(__file__)
@@ -21,7 +20,6 @@ urdf = DNAME / "xarm7_standalone.urdf"
 
 
 class RobotTree:
-
     def __init__(self, path: str = urdf):
         self.path = path
         self.chain = pk.build_chain_from_urdf(open(path, mode="rb").read())
@@ -55,7 +53,6 @@ class RobotPose:
 
 
 from xgym import BASE
-from tqdm import tqdm
 
 
 def plot_frame(mat, ax, length=0.025):
@@ -75,10 +72,11 @@ def plot_frame(mat, ax, length=0.025):
 
 
 def main():
+    robot = RobotTree(str(urdf))
 
-    robot = RobotTree(urdf)
-
-    fig, ax = plt.subplots(1, 1, figsize=(10, 10), subplot_kw={"projection": "3d"})
+    viz = False
+    if viz:
+        fig, ax = plt.subplots(1, 1, figsize=(10, 10), subplot_kw={"projection": "3d"})
 
     # plot x,y,z axes at origin
     # plot_frame(np.eye(4), ax, length=0.1)
@@ -91,7 +89,6 @@ def main():
     X, Y, Z = [], [], []
     kinvs = []
     for i in tqdm(range(len(ways["joints"]))):
-
         d = {k: v[i] for k, v in ways.items()}
 
         joints = d["joints"]
@@ -102,6 +99,10 @@ def main():
         KIN: dict[tf.Transform3d] = robot.set_pose(joints, end_only=False)
         KIN = {k: v.get_matrix() for k, v in KIN.items() if k.startswith("link")}
         kinvs.append(kinv := np.linalg.inv(kin))
+
+        if not viz:
+            continue
+
         # kin = kinvs[-1]
         # x, y, z = kin[:, :3, 3].flatten()
 
@@ -117,19 +118,21 @@ def main():
         for k, mat in KIN.items():
             if k == "link_base":
                 # plot_frame(mat[0].numpy(), ax, length=0.1)
-                plot_frame(kinv[0], ax, length=0.1)
+                if viz:
+                    plot_frame(kinv[0], ax, length=0.1)
 
             _x, _y, _z = mat[0][:3, 3].flatten().numpy()
             _X.append(_x)
             _Y.append(_y)
             _Z.append(_z)
-        ax.plot(_X, _Y, _Z, alpha=0.8, color="gray")
+        if viz:
+            ax.plot(_X, _Y, _Z, alpha=0.8, color="gray")
 
-    ax.scatter(X, Y, Z, c="r", marker="o", label="End Effector")
-    plt.show()
+    if viz:
+        ax.scatter(X, Y, Z, c="r", marker="o", label="End Effector")
+        plt.show()
+
     np.savez(BASE / "kinvs.npz", kinvs=kinvs)
-
-    quit()
 
 
 if __name__ == "__main__":
@@ -137,7 +140,6 @@ if __name__ == "__main__":
 
 
 def sandbox():
-
     # prints out list of joint names
 
     th = np.array([0.0, -np.pi / 4.0, 0.0, np.pi / 2.0, 0.0, np.pi / 4.0, 0.0])

@@ -1,0 +1,4 @@
+*.npz filter=lfs diff=lfs merge=lfs -text
+ways.npz filter=lfs diff=lfs merge=lfs -text
+base.npz filter=lfs diff=lfs merge=lfs -text
+kinvs.npz filter=lfs diff=lfs merge=lfs -text
