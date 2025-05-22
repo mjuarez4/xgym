@@ -86,6 +86,8 @@ class Xarm:
         self.position = None
         self.gripper = None
 
+        self.speed: Speed = SPEED_JOINTS
+
         # if camera is not None:
         # self.camera.start()
 
