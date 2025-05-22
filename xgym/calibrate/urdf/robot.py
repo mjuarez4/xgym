@@ -41,7 +41,7 @@ class RobotTree:
 
     def set_pose(self, pose: np.ndarray, end_only=False) -> np.ndarray:
         """Set the pose of the robot"""
-        assert pose.shape == (7,)
+        assert pose.shape[-1] == 7
         self.pose = torch.Tensor(pose)
         self.kin = self.serial.forward_kinematics(self.pose, end_only=end_only)
         return self.kin
