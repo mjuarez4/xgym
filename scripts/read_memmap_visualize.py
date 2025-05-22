@@ -1,19 +1,27 @@
-from dataclasses import dataclass, field
-from typing import List, Optional
-from tqdm import tqdm
-from rich.pretty import pprint
-from pathlib import Path
+
 import os
+from tqdm import tqdm
+import cv2
+
+from xgym.viz.memmap import read
+
+import jax
+
 import shutil
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List, Optional
+
 import draccus
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 import tyro
+from rich.pretty import pprint
 
 
 @dataclass
-class RunCFG:
+class Config:
     dir: str = "."
     file: str = ""
     num_frames: int = 100
@@ -21,38 +29,73 @@ class RunCFG:
     width: int = 224
     channels: int = 3
 
+def spec (arr):
+    return jax.tree.map(lambda x: x.shape, arr)
 
-def main(cfg: RunCFG):
 
-    file_path = Path(cfg.dir) / cfg.file
+def main(cfg: Config):
 
-    mm = np.memmap(
-        file_path,
-        dtype="uint8",
-        mode="r",
-        shape=(cfg.num_frames, cfg.height, cfg.width, cfg.channels),
-    )
+    if cfg.file:
+        # only look at that File
+        files = [Path(cfg.file)]
+        info, ep = read(files)
+        imgs = {k: v for k, v in ep.items() if "camera" in k}
+        imgs = np.concatenate(list(imgs.values()), axis=1)
+        time = imgs.shape[0]
+        print(f"imgs shape: {time}")
+        for t in tqdm(range(time), leave=False):
+            im = imgs[t]
+            cv2.imshow("img", im)
+            key = cv2.waitKey(5)
+            if key == ord("q"):
+                break
+        pprint(info)
+        pprint(spec(ep))
+    else:
+        files = list(Path(cfg.dir).glob("*.dat"))
 
-    from xgym.viz.memmap import read
+    if not files:
+        # logging.error("No file specified, using the first file in the directory.")
+        return
 
-    info, ep = read(file_path)
+    pprint(files)
+    for f in tqdm(files, leave=False): 
+        try:
+            info, ep = read(f)
+        except Exception as e:
+            print(f"Error reading file {f}: {e}")
+            continue
 
-    import jax
+        imgs = {k: v for k, v in ep.items() if "camera" in k}
+        imgs = np.concatenate(list(imgs.values()), axis=1)
+        time = imgs.shape[0]
+        print(f"imgs shape: {time}")
+        for t in tqdm(range(time), leave=False):
+            im = imgs[t]
+            cv2.imshow("img", im)
+            key = cv2.waitKey(5)
+            if key == ord("q"):
+                break
 
-    spec = lambda arr: jax.tree.map(lambda x: x.shape, arr)
-    pprint(spec(ep))
+        pprint(info)
+        pprint(spec(ep))
 
-    for i in tqdm(range(len(ep['time']))):
+    quit()
+
+    """
+
+    for i in tqdm(range(len(ep["time"]))):
         step = jax.tree.map(lambda x: x[i], ep)
 
-        imgs = {k:v for k, v in step.items() if 'cam' in k}
+        imgs = {k: v for k, v in step.items() if "cam" in k}
         imgs = np.concatenate(list(imgs.values()), axis=0)
         # show with cv2
         import cv2
+
         cv2.imshow("img", imgs)
         key = cv2.waitKey(5)
 
-        if key==ord("q") or key == ord("Q"):
+        if key == ord("q") or key == ord("Q"):
             break
 
     cv2.waitKey(0)
@@ -83,7 +126,6 @@ def main(cfg: RunCFG):
 
     quit()
 
-
     first_camera_frames = mm[::2]
     fig, ax = plt.subplots()
     im = ax.imshow(first_camera_frames[0], animated=True)
@@ -99,6 +141,7 @@ def main(cfg: RunCFG):
     print("showing")
     plt.show()
 
+    """
 
 if __name__ == "__main__":
-    main(tyro.cli(RunCFG))
+    main(tyro.cli(Config))
