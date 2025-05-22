@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import cv2
 from get_calibration import SPEED_JOINTS, Xarm
 from get_calibration import Config as BaseConfig
+import jax
 import numpy as np
 import tyro
 
@@ -43,22 +44,26 @@ class ViewCalibrator:
     def _draw_robot(self, frame: np.ndarray, keypoints: dict[str, np.ndarray]) -> None:
         """Draw the robot joints as points connected by lines."""
 
-        points = []
-        for mat in keypoints.values():
-            point = self.calibrator.project_points(
+        def _project(kp: np.ndarray) -> np.ndarray:
+            """Project a 4x4 point from camera space to image space."""
+            kp = self.calibrator.project_points(
                 (0, 0, 0),
-                mat[:3, :3],
-                mat[:3, 3],
+                kp[:3, :3],
+                kp[:3, 3],
             )
-            points.append(point.reshape(-1))
+            return kp.reshape(-1)
 
-        for a, b in zip(points[:-1], points[1:]):
+        points = jax.tree.map(_project, keypoints)
+
+        last = None
+        for i, (k, v) in enumerate(points.items()):
             pink = (255, 0, 255)
-            a, b = tuple(a.astype(int)), tuple(b.astype(int))
-            cv2.circle(frame, a, 4, pink, -1)
-            cv2.line(frame, a, b, pink, 1)
-        if points:
-            cv2.circle(frame, tuple(points[-1].astype(int)), 4, (255, 0, 255), -1)
+            v = tuple(v.astype(int))
+            cv2.circle(frame, v, 4, pink, -1)
+            # cv2.putText(frame, k, v, cv2.FONT_HERSHEY_SIMPLEX, 0.5, pink, 1)
+            # if last is not None:
+            # cv2.line(frame, last, v, pink, 1)
+            last = v
 
     def _draw_axes(self, frame: np.ndarray, keypoints: dict[str, np.ndarray]) -> None:
         """Overlay coordinate axes for the camera and TCP."""
